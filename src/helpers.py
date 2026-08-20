@@ -10,6 +10,7 @@ from sklearn.metrics import (
     precision_recall_curve,
     roc_auc_score,
     roc_curve,
+    f1_score
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize
@@ -330,6 +331,9 @@ def cleanAndSplitRaw(train, test):
 def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc"):
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
+
+    test_f1score = f1_score(y_true, y_pred, average="macro")
+    print(f"\nTest F1_score: {test_f1score:.4f}")
 
     print("\nClassification report:")
     print(classification_report(y_true, y_pred))

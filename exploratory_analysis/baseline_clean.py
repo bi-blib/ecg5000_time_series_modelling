@@ -16,7 +16,7 @@ BATCH_SIZE = 32
 HIDDEN_SIZE = 64
 NUM_LAYERS = 1
 LR = 0.0001
-EPOCHS = 1000
+EPOCHS = 300
 
 ### Dataset
 class ClassificationDataset(Dataset):
@@ -26,10 +26,7 @@ class ClassificationDataset(Dataset):
         labels: np.ndarray,
         context_length: int,
     ):
-        # XHINT: ECG5000 already gives you one full heartbeat per row plus a
-        # separate label array (y_train/y_test from main()). What extra
-        # argument does this __init__ need so __getitem__ can return a label?
-        self.signal = torch.tensor(signal)
+        self.signal = torch.tensor(signal) #signal is a tensor of the ECG record
         self.labels = labels
         self.context_length = context_length
 
@@ -38,8 +35,6 @@ class ClassificationDataset(Dataset):
         return len(self.signal)
 
     def __getitem__(self, idx):
-        # XHINT: x should be the whole signal for sample idx (one heartbeat),
-        # and y should be that sample's class label - not "the next value".
         x = self.signal[idx]
         y = self.labels[idx]
 

@@ -2,11 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from sklearn.metrics import (
+    ConfusionMatrixDisplay,
     accuracy_score,
     average_precision_score,
     classification_report,
     confusion_matrix,
-    ConfusionMatrixDisplay,
+    f1_score,
     precision_recall_curve,
     roc_auc_score,
     roc_curve,
@@ -14,8 +15,8 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize
 from sklearn.utils.class_weight import compute_class_weight
-from torch.utils.data import Dataset, DataLoader
-import torch.nn as nn
+from torch import nn
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 #Statics
 BATCH_SIZE = 32
@@ -25,7 +26,6 @@ N_HEADS = 4
 NUM_LAYERS = 1
 LR = 0.0001
 EPOCHS = 300
-#TOTAL_SAMPLES = 2500 #/5000, not currently used
 
 class ClassificationDataset(Dataset):
     def __init__(
@@ -33,9 +33,6 @@ class ClassificationDataset(Dataset):
         signal: np.ndarray,
         labels: np.ndarray,
     ):
-        # XHINT: ECG5000 already gives you one full heartbeat per row plus a
-        # separate label array (y_train/y_test from main()). What extra
-        # argument does this __init__ need so __getitem__ can return a label?
         self.signal = torch.tensor(signal)
         self.labels = torch.tensor(labels, dtype=torch.long)
 
@@ -44,8 +41,6 @@ class ClassificationDataset(Dataset):
         return len(self.signal)
 
     def __getitem__(self, idx):
-        # XHINT: x should be the whole signal for sample idx (one heartbeat),
-        # and y should be that sample's class label - not "the next value".
         x = self.signal[idx]
         y = self.labels[idx]
 
@@ -242,14 +237,14 @@ def performTrainingLoop(
                 f"Epoch: {epoch + 1:3d} | "
                 f"Train loss: {train_loss:.8f}"
                 f" | "
-                f"| Val loss: {val_loss:.8f}"
+                f"Val loss: {val_loss:.8f}"
                 f" | "
                 f"Best Val loss: {best_val_loss:.8f}"
                 f" | "
                 f"Best Val epoch: {best_val_epoch + 1}"
             )
 
-        if epoch == best_val_epoch + 100: #early stopping if we haven't had a best val epoch in 100 epochs
+        if epoch == best_val_epoch + 50: #early stopping if we haven't had a best val epoch in 100 epochs
             print("No reduction in validation loss in 100 epochs. Stopping training early.")
             break
 
@@ -312,7 +307,10 @@ def performMetrics(y_true, y_pred, all_logits, class_labels):
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
-    print("\nClassification report:")
+    test_f1score = f1_score(y_true, y_pred, average="macro")
+    print(f"\nTest F1_score: {test_f1score:.4f}")
+
+    print("\nClassification reports:")
     print(classification_report(y_true, y_pred))
 
     cm = confusion_matrix(y_true, y_pred)

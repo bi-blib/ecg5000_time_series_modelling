@@ -11,13 +11,15 @@ from sklearn.metrics import (
     precision_recall_curve,
     roc_auc_score,
     roc_curve,
-    f1_score
+    recall_score,
+    precision_score,
+    balanced_accuracy_score
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize
 from sklearn.utils.class_weight import compute_class_weight
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset
 
 #Statics
 BATCH_SIZE = 32
@@ -248,7 +250,7 @@ def performTrainingLoop(
             )
 
         if epoch == best_val_epoch + EARLY_STOP_NO_IMPROVEMENT: #early stopping if we haven't had a best val epoch in EARLY_STOP_NO_IMPROVEMENT epochs
-            print("No reduction in validation loss in 100 epochs. Stopping training early.")
+            print("No reduction in validation loss in 10 epochs. Stopping training early.")
             break
 
     return train_losses, val_losses
@@ -328,11 +330,17 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
-    test_f1score = f1_score(y_true, y_pred, average="macro")
-    print(f"\nTest F1_score: {test_f1score:.4f}")
+    test_precision = precision_score(y_true, y_pred, average="macro")
+    print(f"Test Macro-averaged precision: {test_precision:.4f}")
+
+    test_recall = recall_score(y_true, y_pred, average="macro")
+    print(f"Test Macro-averaged recall: {test_recall:.4f}")
 
     test_f1score = f1_score(y_true, y_pred, average="macro")
-    print(f"\nTest F1_score: {test_f1score:.4f}")
+    print(f"Test Macro-averaged F1_score: {test_f1score:.4f}")
+
+    test_balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
+    print(f"Test balanced accuracy: {test_balanced_accuracy:.4f}")
 
     print("\nClassification reports:")
     print(classification_report(y_true, y_pred))

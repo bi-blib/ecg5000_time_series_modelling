@@ -64,7 +64,7 @@ def main():
 
     ### Training loop
     train_losses, val_losses = performTrainingLoop(model, train_loader, val_loader, device, criterion)
-    plotLossCurve(train_losses, val_losses)
+    plotLossCurve(train_losses, val_losses, save_path="b_loss.png")
 
     best_model = BaseTransformerClassifier(
         input_size=input_size,
@@ -88,7 +88,7 @@ def main():
 
     ### Metrics
     class_labels = np.unique(y_train)
-    performMetrics(y_true, y_pred, all_logits, class_labels)
+    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="b", roc_suffix="auc")
 
 if __name__ == "__main__":
     main()

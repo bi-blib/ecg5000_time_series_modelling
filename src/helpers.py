@@ -11,6 +11,7 @@ from sklearn.metrics import (
     precision_recall_curve,
     roc_auc_score,
     roc_curve,
+    f1_score
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize
@@ -26,6 +27,8 @@ N_HEADS = 4
 NUM_LAYERS = 1
 LR = 0.0001
 EPOCHS = 300
+EARLY_STOP_NO_IMPROVEMENT = 10
+
 
 class ClassificationDataset(Dataset):
     def __init__(
@@ -244,21 +247,39 @@ def performTrainingLoop(
                 f"Best Val epoch: {best_val_epoch + 1}"
             )
 
-        if epoch == best_val_epoch + 50: #early stopping if we haven't had a best val epoch in 100 epochs
+        if epoch == best_val_epoch + EARLY_STOP_NO_IMPROVEMENT: #early stopping if we haven't had a best val epoch in EARLY_STOP_NO_IMPROVEMENT epochs
             print("No reduction in validation loss in 100 epochs. Stopping training early.")
             break
 
     return train_losses, val_losses
 
-def plotLossCurve(train_losses, val_losses):
+def plotLossCurve(train_losses, val_losses, save_path=None):
+    # Best epoch = lowest val loss; this is also the epoch performTrainingLoop
+    # checkpoints to best_model.pth, so marking it ties the plot back to the
+    # model actually used for testing.
+    best_epoch = int(np.argmin(val_losses))
+    best_val_loss = val_losses[best_epoch]
+
     # Plot loss curve
+    plt.figure()
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Val Loss")
+    plt.axvline(
+        best_epoch,
+        color="green",
+        linestyle="--",
+        linewidth=1,
+        label=f"Best epoch {best_epoch + 1} (val loss={best_val_loss:.4f})",
+    )
     plt.ylabel("log(Loss)", fontsize=12)
     plt.xlabel("Epoch", fontsize=12)
     plt.yscale("log")
     plt.grid(linestyle="dashed")
     plt.legend()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+
     plt.show()
 
 def performTestingLoop(best_model, test_loader, device):
@@ -303,9 +324,12 @@ def cleanAndSplitRaw(train, test):
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-def performMetrics(y_true, y_pred, all_logits, class_labels):
+def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc"):
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
+
+    test_f1score = f1_score(y_true, y_pred, average="macro")
+    print(f"\nTest F1_score: {test_f1score:.4f}")
 
     test_f1score = f1_score(y_true, y_pred, average="macro")
     print(f"\nTest F1_score: {test_f1score:.4f}")
@@ -318,9 +342,23 @@ def performMetrics(y_true, y_pred, all_logits, class_labels):
     print(cm)
 
     ### Plot the results
-    ConfusionMatrixDisplay(cm).plot(cmap="Blues")
-    plt.title("Test set confusion matrix")
+    # Row-normalized panel shows what fraction of each true class landed in
+    # each predicted bucket, which raw counts hide when classes are imbalanced
+    # (e.g. mc_cf.png: class 1 only has ~43 test samples total).
+    cm_norm = confusion_matrix(y_true, y_pred, normalize="true")
+
+    fig_cm, (ax_cm_counts, ax_cm_pct) = plt.subplots(1, 2, figsize=(12, 5))
+    ConfusionMatrixDisplay(cm, display_labels=class_labels).plot(cmap="Blues", ax=ax_cm_counts, colorbar=False)
+    ax_cm_counts.set_title("Counts")
+
+    ConfusionMatrixDisplay(cm_norm, display_labels=class_labels).plot(
+        cmap="Blues", ax=ax_cm_pct, values_format=".1%"
+    )
+    ax_cm_pct.set_title("Proportion of true class")
+
+    fig_cm.suptitle("Test set confusion matrix")
     plt.tight_layout()
+    plt.savefig(f"{prefix}_cf.png", dpi=150, bbox_inches="tight")
     plt.show()
 
     ### AUROC / AUPRC
@@ -377,4 +415,5 @@ def performMetrics(y_true, y_pred, all_logits, class_labels):
     ax_pr.grid(linestyle="dashed")
 
     plt.tight_layout()
+    plt.savefig(f"{prefix}_{roc_suffix}.png", dpi=150, bbox_inches="tight")
     plt.show()

@@ -1,19 +1,31 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    classification_report,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+    precision_recall_curve,
+    roc_auc_score,
+    roc_curve,
+)
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import label_binarize, StandardScaler
+from sklearn.preprocessing import label_binarize
 from sklearn.utils.class_weight import compute_class_weight
-from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
 
 #Statics
 BATCH_SIZE = 32
-HIDDEN_SIZE = 64
+D_MODEL = 64
+DIM_FF = 128
+N_HEADS = 4
 NUM_LAYERS = 1
 LR = 0.0001
-EPOCHS = 100
-TOTAL_SAMPLES = 2500 #/5000
+EPOCHS = 300
+#TOTAL_SAMPLES = 2500 #/5000, not currently used
 
 class ClassificationDataset(Dataset):
     def __init__(
@@ -40,24 +52,69 @@ class ClassificationDataset(Dataset):
         return x, y
 
 
-### LSTM Model
-# HINT: this architecture (LSTM -> last time step -> Linear) works fine for
-# classification too - a many-to-one setup. The main thing to change is what
-# output_size means: instead of "1 value to predict", it should be "1 score
-# per class". Where output_size is set in main(), what should it equal for
-# ECG5000?
-class LSTMClassifier(nn.Module):
-
-    def __init__(self, input_size: int, hidden_size: int, num_layers: int, output_size: int):
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=1000):
         super().__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers=num_layers, batch_first=True) #batch_first because batch comes first in loader batch info
-        self.linear = nn.Linear(hidden_size, output_size)
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2).float()
+            * (-torch.log(torch.tensor(10000.0)) / d_model)
+        )
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0)
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
-        lstm_out, _ = self.lstm(x)
-        last_output = lstm_out[:, -1]
-        output = self.linear(last_output)
-        return output
+        x = x + self.pe[:, : x.size(1)]
+        return x
+
+
+### Transformer Encoder Model
+class BaseTransformerClassifier(nn.Module):
+    def __init__(
+        self,
+        input_size: int,
+        d_model: int,
+        dim_ff: int,
+        n_classes: int,
+        num_layers: int,
+        n_heads: int,
+        n_tokens: int,
+    ):
+        super().__init__()
+
+        self.input_projection = nn.Linear(input_size, d_model)
+
+        self.positional_encoding = PositionalEncoding(d_model=d_model, max_len=n_tokens)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=dim_ff,
+            batch_first=True,
+        )
+
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers)
+
+        self.output_projection = nn.Linear(d_model * n_tokens, n_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        x_embed = self.input_projection(x)
+        x_embed_pe = self.positional_encoding(x_embed)
+
+        z = self.encoder(x_embed_pe)
+
+        # Flatten the output of the encoder
+        z_flat = z.flatten(start_dim=1)
+
+        logits = self.output_projection(z_flat)
+
+        return logits
 
 def getCriterion(y_train, device):
     classes = np.unique(y_train)
@@ -180,6 +237,7 @@ def performTrainingLoop(
                 best_val_epoch = epoch
                 torch.save(model.state_dict(), "best_model.pth")
 
+
             print(
                 f"Epoch: {epoch + 1:3d} | "
                 f"Train loss: {train_loss:.8f}"
@@ -190,6 +248,10 @@ def performTrainingLoop(
                 f" | "
                 f"Best Val epoch: {best_val_epoch + 1}"
             )
+
+        if epoch == best_val_epoch + 100: #early stopping if we haven't had a best val epoch in 100 epochs
+            print("No reduction in validation loss in 100 epochs. Stopping training early.")
+            break
 
     return train_losses, val_losses
 
@@ -226,3 +288,95 @@ def performTestingLoop(best_model, test_loader, device):
     y_true = all_targets.numpy()
 
     return y_pred, y_true, all_logits
+
+def loadRawDataFromFile():
+    train = np.loadtxt("ECG5000/ECG5000_TRAIN.txt")
+    test  = np.loadtxt("ECG5000/ECG5000_TEST.txt")
+    return train, test
+
+def cleanAndSplitRaw(train, test):
+    X_train = train[:, 1:]
+    y_train = train[:, 0]
+    X_temp = test[:, 1:]
+    y_temp = test[:, 0]
+    y_train = y_train - 1
+    y_temp = y_temp - 1
+
+    X_val, X_test, y_val, y_test = train_test_split( 
+        X_temp, y_temp, test_size=0.50, stratify=y_temp, random_state=42
+    )
+
+    return X_train, y_train, X_val, y_val, X_test, y_test
+
+def performMetrics(y_true, y_pred, all_logits, class_labels):
+    test_accuracy = accuracy_score(y_true, y_pred)
+    print(f"\nTest accuracy: {test_accuracy:.4f}")
+
+    print("\nClassification report:")
+    print(classification_report(y_true, y_pred))
+
+    cm = confusion_matrix(y_true, y_pred)
+    print("Confusion matrix:")
+    print(cm)
+
+    ### Plot the results
+    ConfusionMatrixDisplay(cm).plot(cmap="Blues")
+    plt.title("Test set confusion matrix")
+    plt.tight_layout()
+    plt.show()
+
+    ### AUROC / AUPRC
+    # Class scores (probabilities) are needed for threshold-based metrics
+    # like AUROC/AUPRC - argmax predictions (y_pred) collapse that info away.
+    y_score = torch.softmax(all_logits, dim=1).numpy()
+    n_classes = len(class_labels)
+    # label_binarize collapses to a single column for exactly 2 classes, which
+    # breaks the one-vs-rest machinery below, so binary needs its own path.
+    is_binary = n_classes == 2
+
+    if is_binary:
+        pos_score = y_score[:, 1]
+        macro_auroc = roc_auc_score(y_true, pos_score)
+        macro_auprc = average_precision_score(y_true, pos_score)
+    else:
+        y_true_bin = label_binarize(y_true, classes=class_labels)
+        macro_auroc = roc_auc_score(y_true, y_score, average="macro", multi_class="ovr")
+        macro_auprc = average_precision_score(y_true_bin, y_score, average="macro")
+
+    print(f"\nMacro-average AUROC: {macro_auroc:.4f}")
+    print(f"Macro-average AUPRC: {macro_auprc:.4f}")
+
+    # Plot one-vs-rest ROC and Precision-Recall curves, one line per class.
+    fig, (ax_roc, ax_pr) = plt.subplots(1, 2, figsize=(12, 5))
+
+    if is_binary:
+        fpr, tpr, _ = roc_curve(y_true, pos_score)
+        ax_roc.plot(fpr, tpr, label=f"Class {int(class_labels[1]) + 1} (AUROC={macro_auroc:.3f})")
+
+        precision, recall, _ = precision_recall_curve(y_true, pos_score)
+        ax_pr.plot(recall, precision, label=f"Class {int(class_labels[1]) + 1} (AUPRC={macro_auprc:.3f})")
+    else:
+        for i, class_label in enumerate(class_labels):
+            fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_score[:, i])
+            class_auroc = roc_auc_score(y_true_bin[:, i], y_score[:, i])
+            ax_roc.plot(fpr, tpr, label=f"Class {int(class_label) + 1} (AUROC={class_auroc:.3f})")
+
+            precision, recall, _ = precision_recall_curve(y_true_bin[:, i], y_score[:, i])
+            class_auprc = average_precision_score(y_true_bin[:, i], y_score[:, i])
+            ax_pr.plot(recall, precision, label=f"Class {int(class_label) + 1} (AUPRC={class_auprc:.3f})")
+
+    ax_roc.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Chance")
+    ax_roc.set_xlabel("False Positive Rate")
+    ax_roc.set_ylabel("True Positive Rate")
+    ax_roc.set_title(f"ROC curves (macro AUROC={macro_auroc:.3f})")
+    ax_roc.legend(fontsize=8)
+    ax_roc.grid(linestyle="dashed")
+
+    ax_pr.set_xlabel("Recall")
+    ax_pr.set_ylabel("Precision")
+    ax_pr.set_title(f"Precision-Recall curves (macro AUPRC={macro_auprc:.3f})")
+    ax_pr.legend(fontsize=8)
+    ax_pr.grid(linestyle="dashed")
+
+    plt.tight_layout()
+    plt.show()

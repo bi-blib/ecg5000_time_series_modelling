@@ -63,7 +63,7 @@ HPO_EARLY_STOP_NO_IMPROVEMENT = 8
 # TEST_FRACTION is deliberately inverted from the usual small-test-set
 # convention: only 40% of the data is pooled for CV/HPO, 60% is held out.
 RANDOM_STATE = 42
-N_SPLITS = 5
+N_SPLITS = 2
 TEST_FRACTION = 0.60
 
 # Validation/test batches only ever run forward, so they can be far larger

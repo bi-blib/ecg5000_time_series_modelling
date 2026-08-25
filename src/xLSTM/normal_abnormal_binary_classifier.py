@@ -83,13 +83,28 @@ def main():
     criterion = torch.nn.CrossEntropyLoss()
 
     ### Training loop
-    train_losses, val_losses, time_per_epoch = performTrainingLoop(model, train_loader, val_loader, device, criterion)
+    checkpoint_path = f"binary_{opt}_best_model.pth"
+
+    train_losses, val_losses, time_per_epoch = performTrainingLoop(
+        model,
+        train_loader,
+        val_loader,
+        device,
+        criterion,
+        checkpoint_path,
+    )
     plotLossCurve(train_losses, val_losses, save_path="b_loss.png")
 
     ### Model Testing  (Best models m/s/xLSTM)
     best_model = chooseTypeLSTM(opt,input_size,n_classes,n_timesteps, device)
        
-    best_model.load_state_dict(torch.load("best_model.pth")) #load best model (by val loss)
+    best_model.load_state_dict(
+        torch.load(
+            checkpoint_path,
+            map_location=device,
+            weights_only=True,
+        )
+    ) #load best model (by val loss)
 
     # Scale X_test with the scaler fit on X_train (never re-fit on test
     # data), then reshape to (n_samples, seq_len, 1) same as the train set.

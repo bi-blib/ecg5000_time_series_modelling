@@ -586,9 +586,9 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
     test_balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
     print(f"Test balanced accuracy: {test_balanced_accuracy:.4f}")
 
-    average_time_per_epoch = sum(time_per_epoch) / len(time_per_epoch)
-    print(f"Average time per epoch: {average_time_per_epoch:.4f}s")
-    
+    if time_per_epoch:
+        average_time_per_epoch = sum(time_per_epoch) / len(time_per_epoch)
+        print(f"Average time per epoch: {average_time_per_epoch:.4f}s")
 
     print("\nClassification reports:")
     print(classification_report(y_true, y_pred))

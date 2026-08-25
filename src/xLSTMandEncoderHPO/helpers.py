@@ -1,4 +1,7 @@
+import json
+import random
 import time
+from pathlib import Path
 
 import optuna
 from tqdm.auto import tqdm
@@ -20,8 +23,8 @@ from sklearn.metrics import (
     precision_score,
     balanced_accuracy_score
 )
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import label_binarize
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.preprocessing import StandardScaler, label_binarize
 from sklearn.utils.class_weight import compute_class_weight
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
@@ -54,6 +57,13 @@ EARLY_STOP_NO_IMPROVEMENT = 10
 N_TRIALS = 25
 HPO_EPOCHS = 40
 HPO_EARLY_STOP_NO_IMPROVEMENT = 8
+
+# Cross-validated model selection settings (runCrossValidatedModelSelection).
+# TEST_FRACTION is deliberately inverted from the usual small-test-set
+# convention: only 40% of the data is pooled for CV/HPO, 60% is held out.
+RANDOM_STATE = 42
+N_SPLITS = 5
+TEST_FRACTION = 0.60
 
 # Validation/test batches only ever run forward, so they can be far larger
 # than the trial's training batch size. The val set is ~2250 samples and is
@@ -556,19 +566,27 @@ def loadRawDataFromFile():
     test  = np.loadtxt("ECG5000/ECG5000_TEST.txt")
     return train, test
 
-def cleanAndSplitRaw(train, test):
-    X_train = train[:, 1:]
-    y_train = train[:, 0]
-    X_temp = test[:, 1:]
-    y_temp = test[:, 0]
-    y_train = y_train - 1
-    y_temp = y_temp - 1
 
-    X_val, X_test, y_val, y_test = train_test_split( 
-        X_temp, y_temp, test_size=0.50, stratify=y_temp, random_state=42
-    )
+def setSeed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
-    return X_train, y_train, X_val, y_val, X_test, y_test
+
+def loadTaskData(task):
+    """Load complete ECG5000 data and map labels for the selected task."""
+    train, test = loadRawDataFromFile()
+    complete = np.concatenate([train, test])
+    X = complete[:, 1:].astype(np.float32)
+    y = complete[:, 0].astype(np.int64) - 1
+    if task == "binary":
+        return X, (y > 0).astype(np.int64)
+    if task == "multiclass":
+        abnormal = y > 0
+        return X[abnormal], y[abnormal] - 1
+    raise ValueError("task must be 'binary' or 'multiclass'")
 
 def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=[]):
     test_accuracy = accuracy_score(y_true, y_pred)
@@ -927,13 +945,19 @@ def getLoadersOptuna(X_train_scaled, X_val_scaled, X_test_scaled,
 def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion,
                               lr, epochs, early_stop_patience,
                               checkpoint_path=None, verbose=True,
-                              trial=None, weight_decay=0.0):
+                              trial=None, weight_decay=0.0,
+                              label=None, leave=None):
     """Train/validate loop with lr, epochs, patience, checkpoint path and weight
     decay as arguments instead of module constants.
 
     Pass trial=... to report intermediate val loss to Optuna, so unpromising
     trials are pruned partway through instead of burning the full epoch budget.
     Trials pass checkpoint_path=None - they only need the val loss, not weights.
+
+    label/leave override the tqdm bar's caption and leave-behind behaviour.
+    Left as None, they fall back to the trial-derived defaults below - callers
+    that train once per fold (no per-epoch pruning, trial=None) pass their own
+    label so the bar still identifies which trial/fold is running.
     """
     # AdamW rather than Adam so weight decay is decoupled from the gradient;
     # weight_decay=0.0 makes this identical to performTrainingLoop's Adam.
@@ -948,12 +972,15 @@ def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion
     # trial is visible while it runs. Trial bars clear themselves on completion
     # (leave=False) so the log does not fill up with 25 finished bars; the final
     # retrain keeps its bar.
-    label = f"Trial {trial.number + 1}/{N_TRIALS}" if trial is not None else "Final training"
+    if label is None:
+        label = f"Trial {trial.number + 1}/{N_TRIALS}" if trial is not None else "Final training"
+    if leave is None:
+        leave = trial is None
     bar = tqdm(
         range(epochs),
         desc=label,
         unit="ep",
-        leave=trial is None,
+        leave=leave,
         dynamic_ncols=True,
         disable=not SHOW_PROGRESS,
     )
@@ -1048,3 +1075,179 @@ def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion
         )
 
     return train_losses, val_losses
+
+
+def _loader(X, y, batch_size, shuffle):
+    dataset = ClassificationDataset(
+        signal=X.reshape(-1, X.shape[1], 1).astype(np.float32), labels=y
+    )
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+
+
+def makeFolds(X, y):
+    """Create the five disjoint folds reused by every Optuna trial."""
+    splitter = StratifiedKFold(
+        n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE
+    )
+    return list(splitter.split(X, y))
+
+
+def crossValidatedScore(params, X_development, y_development, folds, device, trial):
+    """Return mean five-fold validation loss and all fold-level scores.
+
+    Each fold trains with trial=None (no per-epoch pruning): performTrainingLoopOptuna
+    reports (val_loss, epoch) to trial.report(), and epoch resets to 0 every fold,
+    so reporting across folds on the same trial would violate Optuna's requirement
+    that a trial's reported steps increase monotonically.
+    """
+    fold_scores = []
+    n_classes = len(np.unique(y_development))
+    n_tokens = X_development.shape[1]
+    for fold_number, (train_index, val_index) in enumerate(folds, start=1):
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_development[train_index]).astype(np.float32)
+        X_val = scaler.transform(X_development[val_index]).astype(np.float32)
+        y_train, y_val = y_development[train_index], y_development[val_index]
+
+        setSeed(RANDOM_STATE + fold_number)
+        train_loader = _loader(X_train, y_train, params["batch_size"], True)
+        val_loader = _loader(X_val, y_val, params["batch_size"], False)
+        model = buildModel(params, 1, n_classes, n_tokens, device)
+        _, val_losses = performTrainingLoopOptuna(
+            model,
+            train_loader,
+            val_loader,
+            device,
+            getCriterion(y_train, device),
+            lr=params["lr"],
+            weight_decay=params["weight_decay"],
+            epochs=HPO_EPOCHS,
+            early_stop_patience=HPO_EARLY_STOP_NO_IMPROVEMENT,
+            verbose=False,
+            trial=None,
+            label=f"Trial {trial.number + 1}/{N_TRIALS} fold {fold_number}/{N_SPLITS}",
+            leave=False,
+        )
+        score = float(min(val_losses))
+        fold_scores.append(score)
+        print(f"  fold {fold_number}/{N_SPLITS}: validation loss={score:.6f}")
+    return float(np.mean(fold_scores)), fold_scores
+
+
+def runCrossValidatedModelSelection(task, model_type, output_prefix, roc_suffix):
+    """Select the winning hyperparameters via 5-fold CV over a 40% dev pool,
+    refit on a fresh split of that pool, then test once on the held-out 60%.
+    """
+    setSeed(RANDOM_STATE)
+    torch.set_num_threads(NUM_THREADS)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
+    print("Model type:", model_type)
+
+    X, y = loadTaskData(task)
+
+    # The test set is reserved before CV and never passed to an objective.
+    X_development, X_test, y_development, y_test = train_test_split(
+        X, y, test_size=TEST_FRACTION, stratify=y, random_state=RANDOM_STATE
+    )
+    print(f"Development pool shape: {X_development.shape} (used for {N_SPLITS}-fold CV)")
+    print(f"Held-out test shape: {X_test.shape}")
+    folds = makeFolds(X_development, y_development)
+
+    def objective(trial):
+        params = suggestHyperparams(trial, model_type)
+        print(f"\nTrial {trial.number + 1}/{N_TRIALS}: {params}")
+        mean_score, fold_scores = crossValidatedScore(
+            params, X_development, y_development, folds, device, trial
+        )
+        trial.set_user_attr("fold_scores", fold_scores)
+        trial.set_user_attr("fold_std", float(np.std(fold_scores, ddof=1)))
+        print(
+            f"  mean validation loss={mean_score:.6f} +/- "
+            f"{trial.user_attrs['fold_std']:.6f}"
+        )
+        return mean_score
+
+    study = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
+    )
+    study.optimize(objective, n_trials=N_TRIALS)
+    best_params = resolveBestParams(study, model_type)
+    print("\nSelected lambda*:", best_params)
+    print(f"Mean five-fold validation loss: {study.best_value:.6f}")
+
+    # Fresh train/validation division of the dev pool, matching the 5-fold
+    # proportions used during CV (test_size = 1/N_SPLITS).
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_development,
+        y_development,
+        test_size=1 / N_SPLITS,
+        stratify=y_development,
+        random_state=RANDOM_STATE + 1,
+    )
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train).astype(np.float32)
+    X_val_scaled = scaler.transform(X_val).astype(np.float32)
+    X_test_scaled = scaler.transform(X_test).astype(np.float32)
+
+    input_size = 1
+    n_classes = len(np.unique(y))
+    n_tokens = X.shape[1]
+
+    train_loader, val_loader, test_loader = getLoadersOptuna(
+        X_train_scaled, X_val_scaled, X_test_scaled,
+        y_train, y_val, y_test,
+        batch_size=best_params["batch_size"],
+    )
+
+    model = buildModel(best_params, input_size, n_classes, n_tokens, device)
+    criterion = getCriterion(y_train=y_train, device=device)
+
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Best model has {num_params} trainable parameters.")
+
+    checkpoint_path = f"{output_prefix}_best_model.pth"
+    train_losses, val_losses = performTrainingLoopOptuna(
+        model, train_loader, val_loader, device, criterion,
+        lr=best_params["lr"],
+        weight_decay=best_params["weight_decay"],
+        epochs=EPOCHS,
+        early_stop_patience=EARLY_STOP_NO_IMPROVEMENT,
+        checkpoint_path=checkpoint_path,
+        verbose=True,
+    )
+    plotLossCurve(train_losses, val_losses, save_path=f"{output_prefix}_loss.png")
+
+    best_model = buildModel(best_params, input_size, n_classes, n_tokens, device)
+    best_model.load_state_dict(
+        torch.load(checkpoint_path, map_location=device, weights_only=True)
+    )
+
+    y_pred, y_true, all_logits = performTestingLoop(best_model, test_loader, device)
+    test_score = float(balanced_accuracy_score(y_true, y_pred))
+    class_labels = np.unique(y)
+    performMetrics(
+        y_true, y_pred, all_logits, class_labels,
+        prefix=output_prefix, roc_suffix=roc_suffix,
+    )
+
+    report = {
+        "task": task,
+        "model_type": model_type,
+        "lambda_star": best_params,
+        "mean_cv_validation_loss": study.best_value,
+        "best_fold_scores": study.best_trial.user_attrs["fold_scores"],
+        "test_performance_indicator": "balanced_accuracy",
+        "test_balanced_accuracy": test_score,
+        "split_sizes": {
+            "development": len(y_development),
+            "train": len(y_train),
+            "validation": len(y_val),
+            "test": len(y_test),
+        },
+    }
+    Path(f"{output_prefix}_cv_results.json").write_text(
+        json.dumps(report, indent=2), encoding="utf-8"
+    )
+    return report

@@ -79,7 +79,7 @@ def main():
     criterion = getCriterion(y_train=y_train, device=device)
 
     ### Training loop
-    train_losses, val_losses = performTrainingLoop(model, train_loader, val_loader, device, criterion)
+    train_losses, val_losses, time_per_epoch = performTrainingLoop(model, train_loader, val_loader, device, criterion)
     plotLossCurve(train_losses, val_losses, save_path="mc_loss.png")
 
     ### Model Testing  (Best models m/s/xLSTM)
@@ -98,7 +98,7 @@ def main():
 
     ### Metrics
     class_labels = np.unique(y_train)
-    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="mc", roc_suffix="roc")
+    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="mc", roc_suffix="roc", time_per_epoch=time_per_epoch)
 
 if __name__ == "__main__":
     main()

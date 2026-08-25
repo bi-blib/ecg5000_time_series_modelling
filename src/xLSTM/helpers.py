@@ -1,4 +1,4 @@
-from datetime import time
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -191,7 +191,6 @@ class SLSTMClassifier(nn.Module):
             num_blocks:int, # number of layers
             num_head:int,
             context_length:int,
-            conv1d_length: int,
             conv1d_kernel_size: int,
     ):
         super().__init__()
@@ -205,10 +204,11 @@ class SLSTMClassifier(nn.Module):
                     conv1d_kernel_size=conv1d_kernel_size,
                     backend="vanilla" #vanilla = Pytorch GPU allocation, cuda = custom cuda kernel )
             ),
+            ),
             context_length=context_length, 
             num_blocks=num_blocks, 
             embedding_dim=d_model, 
-        )
+    
         )
 
         self.slstm = xLSTMBlockStack(xlstm_config) 
@@ -238,7 +238,6 @@ class XLSTMClassifier(nn.Module):
                 num_blocks:int, # number of layers
                 num_head:int,
                 context_length:int,
-                conv1d_length: int,
                 conv1d_kernel_size: int,
                 qkv_proj_blocksize:int, 
         ):
@@ -467,7 +466,7 @@ def performTrainingLoop(
             print("No reduction in validation loss in 10 epochs. Stopping training early.")
             break
 
-    return train_losses, val_losses
+    return train_losses, val_losses, time_per_epoch
 
 def plotLossCurve(train_losses, val_losses, save_path=None):
     # Best epoch = lowest val loss; this is also the epoch performTrainingLoop
@@ -481,7 +480,7 @@ def plotLossCurve(train_losses, val_losses, save_path=None):
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Val Loss")
     plt.axvline(
-        best_epoch,
+        best_epoch+1,
         color="green",
         linestyle="--",
         linewidth=1,
@@ -540,7 +539,7 @@ def cleanAndSplitRaw(train, test):
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc"):
+def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=[]):
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
@@ -555,6 +554,10 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
 
     test_balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
     print(f"Test balanced accuracy: {test_balanced_accuracy:.4f}")
+
+    average_time_per_epoch = sum(time_per_epoch) / len(time_per_epoch)
+    print(f"Average time per epoch: {average_time_per_epoch:.4f}s")
+    
 
     print("\nClassification reports:")
     print(classification_report(y_true, y_pred))

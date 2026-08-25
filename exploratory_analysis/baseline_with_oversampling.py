@@ -13,16 +13,16 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import label_binarize, StandardScaler
-from sklearn.utils.class_weight import compute_class_weight
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
+from imblearn.over_sampling import RandomOverSampler
 
 #Statics
-BATCH_SIZE = 32
+BATCH_SIZE = 20
 HIDDEN_SIZE = 64
 NUM_LAYERS = 1
 LR = 0.0001
-EPOCHS = 150
+EPOCHS = 300
 TOTAL_SAMPLES = 2500 #/5000
 
 ### Dataset
@@ -129,6 +129,19 @@ def main():
     X_val_scaled = scaler.transform(X_val).astype(np.float32)
     X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
+    ros = RandomOverSampler(random_state=0)
+    X_train_ros, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+
+    print(
+        "Train class counts before oversampling:",
+        dict(zip(*np.unique(y_train, return_counts=True))),
+    )
+    print(
+        "Train class counts after oversampling:",
+        dict(zip(*np.unique(y_train_ros, return_counts=True))),
+    )
+
+
     ### Create the dataset
     # HINT: pass X_train (and the new label argument you added to
     # ClassificationDataset above) instead of a single windowed signal. The
@@ -136,8 +149,8 @@ def main():
     # is currently 2D (n_samples, seq_len), so it'll need an extra dimension
     # of size 1 added somewhere before it reaches the model.
     train_dataset = ClassificationDataset(
-        signal=X_train_scaled.reshape(-1, X_train_scaled.shape[1], 1),
-        labels=y_train,
+        signal=X_train_ros.reshape(-1, X_train_ros.shape[1], 1),
+        labels=y_train_ros,
     )
 
     val_dataset = ClassificationDataset(
@@ -158,14 +171,14 @@ def main():
 
     val_loader = DataLoader(
         val_dataset,
-        BATCH_SIZE,
-        True
+        batch_size=BATCH_SIZE,
+        shuffle=False,
     )
 
     test_loader = DataLoader(
         test_dataset,
-        BATCH_SIZE,
-        True
+        batch_size=BATCH_SIZE,
+        shuffle=False,
     )
 
     x_batch, y_batch = next(iter(train_loader))
@@ -209,17 +222,10 @@ def main():
     # not what you want when predicting one of several classes. What loss
     # function does PyTorch provide for multi-class classification, and what
     # dtype/shape does it expect the targets (y_batch) to be in?
-    classes = np.unique(y_train)
-
-    class_weights = compute_class_weight(
-        class_weight='balanced',
-        classes=classes,
-        y=y_train
-    )
-    class_weights_tensor = torch.tensor(class_weights, dtype=torch.float).to(device)
-
-    print(class_weights)
-    criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+    # RandomOverSampler has already balanced the training classes. Applying
+    # balanced class weights as well would correct for the same imbalance
+    # twice, so use ordinary cross-entropy here.
+    criterion = nn.CrossEntropyLoss()
 
     # Optimizer
 
@@ -282,7 +288,7 @@ def main():
 
             #save best validation loss use later; protects against overfitting
             if val_loss < best_val_loss:
-                best_val_loss = train_loss
+                best_val_loss = val_loss
                 best_val_epoch = epoch
                 torch.save(model.state_dict(), "best_model.pth")
 
@@ -296,6 +302,9 @@ def main():
                 f" | "
                 f"Best Val epoch: {best_val_epoch + 1}"
             )
+        if epoch == best_val_epoch + 100:
+            print("No reduction in validation loss in 100 epochs. Stop training early")
+            break
 
     # Plot loss curve
     plt.plot(train_losses, label="Train Loss")
@@ -344,13 +353,13 @@ def main():
     y_true = all_targets.numpy()
 
     ### Metrics
-    test_accuracy = accuracy_score(y_true=y_true, y_pred=y_pred)
+    test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
     print("\nClassification report:")
-    print(classification_report(y_true=y_true, y_pred=y_pred))
+    print(classification_report(y_true, y_pred))
 
-    cm = confusion_matrix(y_true=y_true, y_pred=y_pred)
+    cm = confusion_matrix(y_true, y_pred)
     print("Confusion matrix:")
     print(cm)
 

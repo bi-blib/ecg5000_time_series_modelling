@@ -539,19 +539,7 @@ def cleanAndSplitRaw(train, test):
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-def performMetrics(
-        y_true,
-        y_pred,
-        all_logits,
-        class_labels,
-        prefix,
-        roc_suffix="roc",
-        time_per_epoch=None,
-):
-    if time_per_epoch:
-        print(f"\nAverage epoch time: {np.mean(time_per_epoch):.2f} seconds")
-        print(f"Total training time: {np.sum(time_per_epoch):.2f} seconds")
-
+def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=[]):
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
@@ -566,6 +554,10 @@ def performMetrics(
 
     test_balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
     print(f"Test balanced accuracy: {test_balanced_accuracy:.4f}")
+
+    if time_per_epoch:
+        average_time_per_epoch = sum(time_per_epoch) / len(time_per_epoch)
+        print(f"Average time per epoch: {average_time_per_epoch:.4f}s")
 
     print("\nClassification reports:")
     print(classification_report(y_true, y_pred))

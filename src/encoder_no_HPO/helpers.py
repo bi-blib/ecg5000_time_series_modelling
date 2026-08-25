@@ -22,7 +22,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 #Statics
-BATCH_SIZE = 32
+BATCH_SIZE = 20
 D_MODEL = 64
 DIM_FF = 128
 N_HEADS = 4

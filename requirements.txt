@@ -11,3 +11,7 @@ Pillow==11.3.0
 
 # Hyperparameter optimization
 optuna==4.9.0
+
+# xLSTM model family + HPO progress bars
+xlstm==2.0.5
+tqdm==4.70.0

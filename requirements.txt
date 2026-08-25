@@ -1,0 +1,13 @@
+# Core numerical and modelling dependencies
+numpy==1.26.4
+torch==2.2.2
+scikit-learn==1.6.1
+
+# Evaluation, plotting, and exploratory analysis
+matplotlib==3.9.4
+imbalanced-learn==0.12.4
+pandas==2.3.3
+Pillow==11.3.0
+
+# Hyperparameter optimization
+optuna==4.9.0

@@ -1,4 +1,7 @@
-from datetime import time
+import time
+
+import optuna
+from tqdm.auto import tqdm
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,6 +26,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from xlstm import (
+    FeedForwardConfig,
     mLSTMBlockConfig,
     mLSTMLayerConfig,
     sLSTMBlockConfig,
@@ -43,6 +47,33 @@ NUM_LAYERS = 1
 LR = 0.0001
 EPOCHS = 300
 EARLY_STOP_NO_IMPROVEMENT = 10
+
+# Optuna HPO settings. Trials run on a smaller epoch budget than the final
+# training run so a full search finishes in reasonable time on CPU; the
+# winning config is then retrained with the full EPOCHS budget.
+N_TRIALS = 25
+HPO_EPOCHS = 40
+HPO_EARLY_STOP_NO_IMPROVEMENT = 8
+
+# Validation/test batches only ever run forward, so they can be far larger
+# than the trial's training batch size. The val set is ~2250 samples and is
+# evaluated every epoch, so this is the cheapest speedup available on CPU.
+EVAL_BATCH_SIZE = 256
+
+# ECG5000 epochs are tiny (500 samples), so the per-op matmuls are small and
+# spreading them over every core costs more in thread sync than it saves.
+NUM_THREADS = 4
+
+# Per-trial epoch progress bars. Set False for clean logs when redirecting
+# output to a file.
+SHOW_PROGRESS = True
+
+# Which architecture the Optuna workflow searches over.
+#   "xlstm"       -> TunableXLSTMClassifier (mLSTM / mixed / sLSTM block stack)
+#   "transformer" -> BaseTransformerClassifier (the original encoder)
+# This is the single switch: it picks both the search space and the model that
+# buildModel constructs. Nothing else needs to change.
+MODEL_TYPE = "transformer"
 
 
 class ClassificationDataset(Dataset):
@@ -191,7 +222,6 @@ class SLSTMClassifier(nn.Module):
             num_blocks:int, # number of layers
             num_head:int,
             context_length:int,
-            conv1d_length: int,
             conv1d_kernel_size: int,
     ):
         super().__init__()
@@ -238,7 +268,6 @@ class XLSTMClassifier(nn.Module):
                 num_blocks:int, # number of layers
                 num_head:int,
                 context_length:int,
-                conv1d_length: int,
                 conv1d_kernel_size: int,
                 qkv_proj_blocksize:int, 
         ):
@@ -641,3 +670,376 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
     plt.show()
 
 
+
+
+### Optuna-tunable xLSTM
+
+class TunableXLSTMClassifier(nn.Module):
+    """One xLSTM classifier covering all three block layouts.
+
+    MLSTMClassifier / SLSTMClassifier / XLSTMClassifier above each hard-code a
+    single layout and a flatten head. Optuna needs to move between layouts and
+    head types inside one search space, so this class takes both as arguments:
+
+      block_mix  "mlstm" -> every block is an mLSTM block
+                 "mixed" -> mLSTM blocks with one sLSTM block last
+                 "slstm" -> every block is an sLSTM block
+      pooling    "last" / "mean" / "flatten" - how (B, T, d_model) collapses to
+                 a single vector before the classification head.
+
+    No positional encoding: xLSTM is recurrent and causal, so position is
+    already implicit in the scan.
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+        d_model: int,
+        n_classes: int,
+        n_tokens: int,
+        num_blocks: int,
+        num_heads: int,
+        conv1d_kernel_size: int,
+        qkv_proj_blocksize: int,
+        proj_factor: float,
+        dropout: float,
+        block_mix: str,
+        pooling: str,
+    ):
+        super().__init__()
+        self.pooling = pooling
+
+        # "mixed" needs somewhere to put the mLSTM block; with a single block it
+        # would silently collapse to an all-sLSTM stack, so name it as such.
+        if block_mix == "mixed" and num_blocks < 2:
+            block_mix = "mlstm"
+        self.block_mix = block_mix
+
+        self.input_projection = nn.Linear(input_size, d_model)
+
+        slstm_at = {"mlstm": [], "mixed": [num_blocks - 1], "slstm": "all"}[block_mix]
+
+        # Built fresh every time: xLSTMBlockStackConfig.__post_init__ mutates the
+        # nested block configs (embedding_dim, dropout, context_length), so a
+        # config object must never be shared across models or trials.
+        xlstm_config = xLSTMBlockStackConfig(
+            mlstm_block=None if block_mix == "slstm" else mLSTMBlockConfig(
+                mlstm=mLSTMLayerConfig(
+                    conv1d_kernel_size=conv1d_kernel_size,
+                    qkv_proj_blocksize=qkv_proj_blocksize,
+                    num_heads=num_heads,
+                    proj_factor=proj_factor,
+                )
+            ),
+            slstm_block=None if block_mix == "mlstm" else sLSTMBlockConfig(
+                slstm=sLSTMLayerConfig(
+                    num_heads=num_heads,
+                    conv1d_kernel_size=conv1d_kernel_size,
+                    # Both are required on a CPU-only machine: sLSTMCellConfig
+                    # defaults to backend="cuda" (which JIT-compiles CUDA
+                    # kernels) and dtype="bfloat16".
+                    backend="vanilla",
+                    dtype="float32",
+                ),
+                feedforward=FeedForwardConfig(proj_factor=1.3, act_fn="gelu"),
+            ),
+            context_length=n_tokens,  # sizes the mLSTM causal mask - must be the seq len
+            num_blocks=num_blocks,
+            embedding_dim=d_model,
+            dropout=dropout,
+            # Must be passed here, not assigned afterwards: __post_init__ turns
+            # it into the block map that decides which block class goes where.
+            slstm_at=slstm_at,
+        )
+
+        self.encoder = xLSTMBlockStack(xlstm_config)
+
+        head_in = d_model * n_tokens if pooling == "flatten" else d_model
+        self.output_projection = nn.Linear(head_in, n_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # (B, T, input_size) -> (B, T, d_model)
+        z = self.encoder(self.input_projection(x))
+
+        if self.pooling == "last":
+            z = z[:, -1, :]
+        elif self.pooling == "mean":
+            z = z.mean(dim=1)
+        else:
+            z = z.flatten(start_dim=1)
+
+        return self.output_projection(z)
+
+
+def suggestXLSTMHyperparams(trial):
+    """Search space for TunableXLSTMClassifier + training hyperparameters.
+
+    Every combination below is valid by construction. The mLSTM inner dim is
+    round_up(proj_factor * d_model, multiple_of=64), so num_heads and
+    qkv_proj_blocksize always divide it; sLSTM sets hidden_size = d_model, and
+    both 2 and 4 divide each of 32/64/128.
+
+    Ordered roughly by expected impact on this dataset (500 training samples,
+    140 timesteps, heavy class imbalance) - regularisation and head size matter
+    more here than raw capacity.
+    """
+    return {
+        "lr": trial.suggest_float("lr", 1e-4, 5e-3, log=True),
+        "pooling": trial.suggest_categorical("pooling", ["last", "mean", "flatten"]),
+        "dropout": trial.suggest_float("dropout", 0.0, 0.4),
+        "d_model": trial.suggest_categorical("d_model", [32, 64, 128]),
+        "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True),
+        "num_blocks": trial.suggest_int("num_blocks", 1, 3),
+        "block_mix": trial.suggest_categorical("block_mix", ["mlstm", "mixed", "slstm"]),
+        "conv1d_kernel_size": trial.suggest_categorical("conv1d_kernel_size", [2, 4, 8]),
+        "num_heads": trial.suggest_categorical("num_heads", [2, 4]),
+        "proj_factor": trial.suggest_categorical("proj_factor", [1.0, 2.0]),
+        "batch_size": trial.suggest_categorical("batch_size", [32, 64, 128]),
+        # Fixed rather than searched: it is effectively a re-parameterisation of
+        # head count, and 25 trials is already thin for the dimensions above.
+        # Promote to [2, 4, 8] if the search budget grows.
+        "qkv_proj_blocksize": 4,
+    }
+
+
+def suggestTransformerHyperparams(trial):
+    """Search space for BaseTransformerClassifier + training hyperparameters.
+
+    n_heads is drawn from values that evenly divide every d_model choice below
+    (32/64/128 are all divisible by 2 and 4), so every sampled combination is a
+    valid nn.MultiheadAttention config.
+
+    weight_decay is included so this dict is interchangeable with the xLSTM one
+    at every call site - performTrainingLoopOptuna takes it either way.
+    """
+    return {
+        "d_model": trial.suggest_categorical("d_model", [32, 64, 128]),
+        "n_heads": trial.suggest_categorical("n_heads", [2, 4]),
+        "num_layers": trial.suggest_int("num_layers", 1, 3),
+        "dim_ff": trial.suggest_categorical("dim_ff", [64, 128, 256]),
+        "lr": trial.suggest_float("lr", 1e-5, 1e-2, log=True),
+        "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True),
+        "batch_size": trial.suggest_categorical("batch_size", [32, 64, 128]),
+    }
+
+
+def suggestHyperparams(trial, model_type=MODEL_TYPE):
+    """Dispatch to the right search space and tag the result with model_type.
+
+    The tag rides along in the params dict so buildModel knows what to build
+    without a second argument threaded through every call site.
+    """
+    if model_type == "transformer":
+        params = suggestTransformerHyperparams(trial)
+    elif model_type == "xlstm":
+        params = suggestXLSTMHyperparams(trial)
+    else:
+        raise ValueError(
+            f"Unknown model_type {model_type!r}, expected 'xlstm' or 'transformer'"
+        )
+
+    params["model_type"] = model_type
+    return params
+
+
+def resolveBestParams(study, model_type=MODEL_TYPE):
+    """Rebuild the full param dict for the winning trial.
+
+    study.best_params only contains values that went through a trial.suggest_*
+    call, so anything injected (model_type) or fixed (qkv_proj_blocksize) is
+    missing from it and has to be put back before buildModel sees it.
+    """
+    best_params = dict(study.best_params)
+    best_params["model_type"] = model_type
+    best_params.setdefault("qkv_proj_blocksize", QVK_PROJ_BLOCKSIZE)
+    return best_params
+
+def buildModel(params, input_size, n_classes, n_tokens, device):
+    """Single choke point for model construction.
+
+    Called three times per run with the same params (trial, retrain, reload), so
+    every architectural knob comes from params rather than module constants -
+    otherwise the reloaded model would not match the saved state_dict.
+
+    Dispatches on params["model_type"], which suggestHyperparams tags onto the
+    dict. Defaults to "xlstm" when the tag is absent.
+    """
+    if params.get("model_type", "xlstm") == "transformer":
+        return BaseTransformerClassifier(
+            input_size=input_size,
+            d_model=params["d_model"],
+            dim_ff=params["dim_ff"],
+            n_classes=n_classes,
+            num_layers=params["num_layers"],
+            n_heads=params["n_heads"],
+            n_tokens=n_tokens,
+        ).to(device)
+
+    return TunableXLSTMClassifier(
+        input_size=input_size,
+        d_model=params["d_model"],
+        n_classes=n_classes,
+        n_tokens=n_tokens,
+        num_blocks=params["num_blocks"],
+        num_heads=params["num_heads"],
+        conv1d_kernel_size=params["conv1d_kernel_size"],
+        qkv_proj_blocksize=params.get("qkv_proj_blocksize", QVK_PROJ_BLOCKSIZE),
+        proj_factor=params["proj_factor"],
+        dropout=params["dropout"],
+        block_mix=params["block_mix"],
+        pooling=params["pooling"],
+    ).to(device)
+
+
+def getLoadersOptuna(X_train_scaled, X_val_scaled, X_test_scaled,
+                     y_train, y_val, y_test, batch_size,
+                     eval_batch_size=None):
+    """Same as getLoaders, but batch_size is an argument so Optuna can tune it,
+    and val/test get their own larger batch size - they never backprop, and the
+    val set is evaluated every single epoch."""
+    eval_bs = eval_batch_size or max(batch_size, EVAL_BATCH_SIZE)
+
+    train_dataset = ClassificationDataset(
+        signal=X_train_scaled.reshape(-1, X_train_scaled.shape[1], 1),
+        labels=y_train,
+    )
+    val_dataset = ClassificationDataset(
+        signal=X_val_scaled.reshape(-1, X_val_scaled.shape[1], 1),
+        labels=y_val,
+    )
+    test_dataset = ClassificationDataset(
+        signal=X_test_scaled.reshape(-1, X_test_scaled.shape[1], 1),
+        labels=y_test,
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=eval_bs, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=eval_bs, shuffle=False)
+
+    return train_loader, val_loader, test_loader
+
+
+def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion,
+                              lr, epochs, early_stop_patience,
+                              checkpoint_path=None, verbose=True,
+                              trial=None, weight_decay=0.0):
+    """Train/validate loop with lr, epochs, patience, checkpoint path and weight
+    decay as arguments instead of module constants.
+
+    Pass trial=... to report intermediate val loss to Optuna, so unpromising
+    trials are pruned partway through instead of burning the full epoch budget.
+    Trials pass checkpoint_path=None - they only need the val loss, not weights.
+    """
+    # AdamW rather than Adam so weight decay is decoupled from the gradient;
+    # weight_decay=0.0 makes this identical to performTrainingLoop's Adam.
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    train_losses = []
+    val_losses = []
+    best_val_loss = float("inf")
+    best_val_epoch = 0
+
+    # One bar per trial, showing elapsed time, s/epoch and ETA so the cost of a
+    # trial is visible while it runs. Trial bars clear themselves on completion
+    # (leave=False) so the log does not fill up with 25 finished bars; the final
+    # retrain keeps its bar.
+    label = f"Trial {trial.number + 1}/{N_TRIALS}" if trial is not None else "Final training"
+    bar = tqdm(
+        range(epochs),
+        desc=label,
+        unit="ep",
+        leave=trial is None,
+        dynamic_ncols=True,
+        disable=not SHOW_PROGRESS,
+    )
+
+    started = time.perf_counter()
+    status = "completed"
+    epochs_run = 0
+
+    try:
+        for epoch in bar:
+            epochs_run = epoch + 1
+            model.train()
+            train_loss = 0.0
+
+            for x_batch, y_batch in train_loader:
+                x_batch = x_batch.to(device)
+                y_batch = y_batch.to(device)
+
+                optimizer.zero_grad()
+                predictions = model(x_batch)
+                loss = criterion(predictions, y_batch)
+                loss.backward()
+                optimizer.step()
+
+                train_loss += loss.item()
+
+            train_loss /= len(train_loader)
+            train_losses.append(train_loss)
+
+            val_loss = 0.0
+            model.eval()
+            with torch.inference_mode():
+                for x_batch, y_batch in val_loader:
+                    x_batch = x_batch.to(device)
+                    y_batch = y_batch.to(device)
+                    predictions = model(x_batch)
+                    loss = criterion(predictions, y_batch)
+                    val_loss += loss.item()
+
+            val_loss /= len(val_loader)
+            val_losses.append(val_loss)
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_val_epoch = epoch
+                if checkpoint_path:
+                    torch.save(model.state_dict(), checkpoint_path)
+
+            bar.set_postfix(
+                train=f"{train_loss:.4f}",
+                val=f"{val_loss:.4f}",
+                best=f"{best_val_loss:.4f}@{best_val_epoch + 1}",
+            )
+
+            if verbose:
+                # bar.write, not print - print would tear the bar in half.
+                bar.write(
+                    f"Epoch: {epoch + 1:3d} | "
+                    f"Train loss: {train_loss:.8f} | "
+                    f"Val loss: {val_loss:.8f} | "
+                    f"Best Val loss: {best_val_loss:.8f} | "
+                    f"Best Val epoch: {best_val_epoch + 1}"
+                )
+
+            # Report before the early-stop check, so a trial that stops early
+            # still contributes its final value to the pruner's statistics.
+            if trial is not None:
+                trial.report(val_loss, epoch)
+                if trial.should_prune():
+                    status = "pruned"
+                    raise optuna.TrialPruned()
+
+            if epoch - best_val_epoch >= early_stop_patience:
+                status = "early-stopped"
+                if verbose:
+                    bar.write(
+                        f"No reduction in validation loss in {early_stop_patience} "
+                        "epochs. Stopping training early."
+                    )
+                break
+    finally:
+        bar.close()
+        elapsed = time.perf_counter() - started
+        per_epoch = elapsed / max(epochs_run, 1)
+        # Printed for every trial, pruned ones included, so the per-trial cost
+        # stays on the record after the bar has cleared itself.
+        print(
+            f"{label}: {status} after {epochs_run} epochs in {elapsed:.1f}s "
+            f"({per_epoch:.2f}s/epoch) | best val loss "
+            f"{best_val_loss:.6f} @ epoch {best_val_epoch + 1}",
+            flush=True,
+        )
+
+    return train_losses, val_losses

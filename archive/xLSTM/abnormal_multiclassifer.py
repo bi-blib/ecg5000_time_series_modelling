@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from helpers import *
+from ecg5000_time_series_modelling.archive.xLSTM.helpers import *
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import RandomOverSampler
 

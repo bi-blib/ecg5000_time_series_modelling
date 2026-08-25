@@ -1,17 +1,29 @@
 import numpy as np
 import torch
+from ecg5000_time_series_modelling.archive.encoder_no_HPO.helpers import *
 from sklearn.preprocessing import StandardScaler
 
-from helpers import *
 
 def main():
     ### Load the data
+    # ECG5000 ships pre-split train/test files, but we want our own 70/15/15
+    # train/validation/test split with class ratios preserved, so combine
+    # both files into one pool and re-split below.
     train, test = loadRawDataFromFile()
     X_train, y_train, X_val, y_val, X_test, y_test = cleanAndSplitRaw(train, test)
 
-    y_train = np.array([1 if y > 0 else 0 for y in y_train])
-    y_val = np.array([1 if y > 0 else 0 for y in y_val])
-    y_test = np.array([1 if y > 0 else 0 for y in y_test])
+
+    # Restrict to abnormal beats only (drop class 0 / healthy), then shift
+    # the remaining labels down by 1 so they stay a contiguous 0-indexed
+    # range - CrossEntropyLoss and the model's output_size both assume that.
+    train_mask = y_train > 0
+    val_mask = y_val > 0
+    test_mask = y_test > 0
+
+    X_train, y_train = X_train[train_mask], y_train[train_mask] - 1
+    X_val, y_val = X_val[val_mask], y_val[val_mask] - 1
+    X_test, y_test = X_test[test_mask], y_test[test_mask] - 1
+
 
     print("Train Signal Shape:", X_train.shape)
     print("Val Signal Shape:", X_val.shape)
@@ -25,6 +37,7 @@ def main():
     X_val_scaled = scaler.transform(X_val).astype(np.float32)
     X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
+    ### Create the dataset
     train_loader, val_loader, test_loader = getLoaders(
         X_train_scaled=X_train_scaled,
         X_val_scaled=X_val_scaled,
@@ -64,7 +77,7 @@ def main():
 
     ### Training loop
     train_losses, val_losses = performTrainingLoop(model, train_loader, val_loader, device, criterion)
-    plotLossCurve(train_losses, val_losses, save_path="b_loss.png")
+    plotLossCurve(train_losses, val_losses, save_path="mc_loss.png")
 
     best_model = BaseTransformerClassifier(
         input_size=input_size,
@@ -88,7 +101,7 @@ def main():
 
     ### Metrics
     class_labels = np.unique(y_train)
-    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="b", roc_suffix="auc")
+    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="mc", roc_suffix="roc")
 
 if __name__ == "__main__":
     main()

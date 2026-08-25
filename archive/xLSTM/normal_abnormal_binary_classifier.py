@@ -5,7 +5,7 @@ from imblearn.over_sampling import RandomOverSampler
 
 
 
-from helpers import *
+from ecg5000_time_series_modelling.archive.xLSTM.helpers import *
 
 def main():
 

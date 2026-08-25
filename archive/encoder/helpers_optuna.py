@@ -27,7 +27,7 @@ try:
         plotLossCurve,
     )
 except ImportError:
-    from helpers import (
+    from ecg5000_time_series_modelling.archive.encoder.helpers import (
         BaseTransformerClassifier,
         ClassificationDataset,
         EARLY_STOP_NO_IMPROVEMENT,

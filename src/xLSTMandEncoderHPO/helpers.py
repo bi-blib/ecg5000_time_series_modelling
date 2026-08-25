@@ -45,7 +45,7 @@ D_MODEL = 64
 DIM_FF = 128
 NUM_BLOCKS = 1 # set to 2 or more for xLSTM with mLSTM and sLSTM block
 NUM_HEADS = 4
-CONV1D_KERNEL_SIZE= 4 # the amount of timesteps shoul we use to get the representation that we want
+CONV1D_KERNEL_SIZE= 4 # the amount of timesteps we should use to get the representation that we want
 QVK_PROJ_BLOCKSIZE=4
 NUM_LAYERS = 1
 LR = 0.0001
@@ -253,7 +253,7 @@ class SLSTMClassifier(nn.Module):
                 slstm=sLSTMLayerConfig(
                     num_heads=num_head,
                     conv1d_kernel_size=conv1d_kernel_size,
-                    backend="vanilla" #vanilla = Pytorch GPU allocation, cuda = custom cuda kernel )
+                    backend="vanilla" #vanilla = Pytorch GPU allocation, cuda = custom cuda kernel
             ),
             ),
             context_length=context_length, 
@@ -365,7 +365,7 @@ def chooseTypeLSTM(opt, input_size,n_classes,n_timesteps, device:torch.device):
             input_size=input_size,
             n_classes=n_classes,
             d_model=D_MODEL,
-            num_blocks=2, #we have to be have min 2 blocks because we have an slstm/ mlstm
+            num_blocks=2, #we have to have min 2 blocks because we have an slstm/ mlstm
             num_head=NUM_HEADS,
             context_length=n_timesteps,
             conv1d_kernel_size=CONV1D_KERNEL_SIZE,
@@ -531,7 +531,7 @@ def plotLossCurve(train_losses, val_losses, save_path=None):
     plt.plot(train_losses, label="Train Loss")
     plt.plot(val_losses, label="Val Loss")
     plt.axvline(
-        best_epoch+1,
+        best_epoch,
         color="green",
         linestyle="--",
         linewidth=1,
@@ -687,7 +687,10 @@ def loadTaskData(task):
         return X[abnormal], y[abnormal] - 1
     raise ValueError("task must be 'binary' or 'multiclass'")
 
-def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=[], decision_thresholds=None, val_true=None, val_logits=None):
+def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=None, decision_thresholds=None, val_true=None, val_logits=None):
+    if time_per_epoch is None:
+        time_per_epoch = []
+        
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 

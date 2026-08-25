@@ -1,8 +1,8 @@
 import numpy as np
 import torch
+from helpers import *
 from sklearn.preprocessing import StandardScaler
 
-from helpers import *
 
 def main():
     ### Load the data

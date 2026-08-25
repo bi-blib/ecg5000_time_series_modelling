@@ -378,6 +378,7 @@ def performTrainingLoop(
         val_loader,
         device,
         criterion,
+        checkpoint_path,
 ) -> None:
 
     # Optimizer
@@ -447,7 +448,7 @@ def performTrainingLoop(
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_val_epoch = epoch
-            torch.save(model.state_dict(), "best_model.pth")
+            torch.save(model.state_dict(), checkpoint_path)
 
 
         print(
@@ -465,7 +466,7 @@ def performTrainingLoop(
             print("No reduction in validation loss in 10 epochs. Stopping training early.")
             break
 
-    return train_losses, val_losses
+    return train_losses, val_losses, time_per_epoch
 
 def plotLossCurve(train_losses, val_losses, save_path=None):
     # Best epoch = lowest val loss; this is also the epoch performTrainingLoop
@@ -538,7 +539,19 @@ def cleanAndSplitRaw(train, test):
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc"):
+def performMetrics(
+        y_true,
+        y_pred,
+        all_logits,
+        class_labels,
+        prefix,
+        roc_suffix="roc",
+        time_per_epoch=None,
+):
+    if time_per_epoch:
+        print(f"\nAverage epoch time: {np.mean(time_per_epoch):.2f} seconds")
+        print(f"Total training time: {np.sum(time_per_epoch):.2f} seconds")
+
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 

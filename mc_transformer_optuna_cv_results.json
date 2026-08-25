@@ -12,13 +12,22 @@
     "model_type": "transformer",
     "qkv_proj_blocksize": 4
   },
-  "mean_cv_validation_loss": 1.7100991497819238,
+  "mean_cv_validation_loss": 0.5646784448852906,
   "best_fold_scores": [
-    1.3744436101271555,
-    2.0457546894366923
+    0.5486607345250937,
+    0.5806961552454875
   ],
+  "decision_threshold": {
+    "beta": 1.0,
+    "thresholds": [
+      0.6624492406845093,
+      0.28503209352493286,
+      0.16185262799263,
+      0.9080217480659485
+    ]
+  },
   "test_performance_indicator": "balanced_accuracy",
-  "test_balanced_accuracy": 0.5451231062804399,
+  "test_balanced_accuracy": 0.50181246895066,
   "split_sizes": {
     "development": 832,
     "train": 416,

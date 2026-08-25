@@ -71,6 +71,15 @@ TEST_FRACTION = 0.60
 # evaluated every epoch, so this is the cheapest speedup available on CPU.
 EVAL_BATCH_SIZE = 256
 
+# Decision-threshold selection (runCrossValidatedModelSelection), done on the
+# validation set and then frozen before touching the test set.
+#   Binary: F-beta with beta>1 weights recall over precision, so missing an
+#   abnormal ECG (false negative) costs more than a false alarm.
+#   Multiclass: beta=1 (plain F1), applied per class one-vs-rest, so no class
+#   is favoured over another.
+BINARY_THRESHOLD_BETA = 2.0
+MULTICLASS_THRESHOLD_BETA = 1.0
+
 # ECG5000 epochs are tiny (500 samples), so the per-op matmuls are small and
 # spreading them over every core costs more in thread sync than it saves.
 NUM_THREADS = 4
@@ -539,17 +548,21 @@ def plotLossCurve(train_losses, val_losses, save_path=None):
 
     plt.show()
 
-def performTestingLoop(best_model, test_loader, device):
-    best_model.eval()
+def performInferenceLoop(model, loader, device):
+    """Forward-only pass over a loader, returning raw logits and targets.
+
+    Shared by performTestingLoop (argmax predictions) and threshold selection
+    (which needs class probabilities instead of a collapsed prediction).
+    """
+    model.eval()
     all_logits = []
     all_targets = []
 
-    #testing loop
     with torch.no_grad():
-        for x_batch, y_batch in test_loader:
+        for x_batch, y_batch in loader:
             x_batch = x_batch.to(device)
 
-            logits = best_model(x_batch)
+            logits = model(x_batch)
 
             all_logits.append(logits.cpu())
             all_targets.append(y_batch.cpu())
@@ -557,10 +570,95 @@ def performTestingLoop(best_model, test_loader, device):
     all_logits = torch.cat(all_logits, dim=0)
     all_targets = torch.cat(all_targets, dim=0)
 
+    return all_logits, all_targets
+
+
+def performTestingLoop(best_model, test_loader, device):
+    all_logits, all_targets = performInferenceLoop(best_model, test_loader, device)
+
     y_pred = all_logits.argmax(dim=1).numpy()
     y_true = all_targets.numpy()
 
     return y_pred, y_true, all_logits
+
+
+def chooseThresholdMaxFbeta(y_true, y_score, beta=1.0):
+    """Pick the decision threshold on a precision_recall_curve that maximizes
+    F-beta for one binary (or one-vs-rest) score column.
+
+    beta=1 is plain F1 (precision and recall weighted equally). beta>1 shifts
+    the optimum towards higher-recall thresholds, i.e. it is willing to trade
+    some precision (more false positives) for fewer false negatives - this is
+    how "prioritize catching positives, even at the cost of a few more false
+    positives" gets encoded as a single number instead of picking a threshold
+    by hand.
+
+    Returns (threshold, fbeta, precision, recall) at the best point.
+    """
+    precision, recall, thresholds = precision_recall_curve(y_true, y_score)
+    # precision_recall_curve appends a final (precision=1, recall=0) point for
+    # an implicit threshold of +inf that has no corresponding entry in
+    # `thresholds`, so drop it before pairing the arrays up.
+    precision, recall = precision[:-1], recall[:-1]
+
+    beta_sq = beta ** 2
+    denom = beta_sq * precision + recall
+    fbeta = np.divide(
+        (1 + beta_sq) * precision * recall,
+        denom,
+        out=np.zeros_like(denom),
+        where=denom > 0,
+    )
+
+    best_idx = int(np.argmax(fbeta))
+    return (
+        float(thresholds[best_idx]),
+        float(fbeta[best_idx]),
+        float(precision[best_idx]),
+        float(recall[best_idx]),
+    )
+
+
+def chooseMulticlassThresholds(y_true, y_score, class_labels, beta=1.0):
+    """One-vs-rest F-beta-optimal threshold per class.
+
+    Each class gets its own threshold from chooseThresholdMaxFbeta run
+    against its own one-vs-rest column, so classes are treated independently
+    rather than pooled - a rare class does not get drowned out by a common
+    one when picking its cutoff.
+    """
+    y_true_bin = label_binarize(y_true, classes=class_labels)
+    n_classes = len(class_labels)
+    thresholds = np.zeros(n_classes)
+    fbetas = np.zeros(n_classes)
+    precisions = np.zeros(n_classes)
+    recalls = np.zeros(n_classes)
+
+    for i in range(n_classes):
+        thr, fbeta, prec, rec = chooseThresholdMaxFbeta(
+            y_true_bin[:, i], y_score[:, i], beta=beta
+        )
+        thresholds[i], fbetas[i], precisions[i], recalls[i] = thr, fbeta, prec, rec
+
+    return thresholds, fbetas, precisions, recalls
+
+
+def applyMulticlassThresholds(y_score, thresholds):
+    """Turn per-class one-vs-rest thresholds into a single predicted label.
+
+    Each sample goes to the class whose score clears its own threshold by the
+    largest margin. Independently tuned thresholds don't guarantee any class
+    clears its bar for every sample, so when none do, fall back to plain
+    argmax (equivalent to the untuned decision rule) rather than leaving the
+    sample unclassified.
+    """
+    margin = y_score - thresholds[np.newaxis, :]
+    any_cleared = (margin > 0).any(axis=1)
+    return np.where(
+        any_cleared,
+        np.argmax(margin, axis=1),
+        np.argmax(y_score, axis=1),
+    )
 
 def loadRawDataFromFile():
     train = np.loadtxt("ECG5000/ECG5000_TRAIN.txt")
@@ -589,7 +687,7 @@ def loadTaskData(task):
         return X[abnormal], y[abnormal] - 1
     raise ValueError("task must be 'binary' or 'multiclass'")
 
-def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=[]):
+def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc", time_per_epoch=[], decision_thresholds=None, val_true=None, val_logits=None):
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
@@ -645,53 +743,116 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
     # breaks the one-vs-rest machinery below, so binary needs its own path.
     is_binary = n_classes == 2
 
-    if is_binary:
-        pos_score = y_score[:, 1]
-        macro_auroc = roc_auc_score(y_true, pos_score)
-        macro_auprc = average_precision_score(y_true, pos_score)
-    else:
-        y_true_bin = label_binarize(y_true, classes=class_labels)
-        macro_auroc = roc_auc_score(y_true, y_score, average="macro", multi_class="ovr")
-        macro_auprc = average_precision_score(y_true_bin, y_score, average="macro")
+    def _plotRocPr(y_true_, y_score_, ax_roc_, ax_pr_, annotate_threshold=True):
+        """Draw one-vs-rest ROC/PR curves, optionally with decision-threshold
+        markers on the PR axes. Markers are recomputed from y_true_/y_score_ -
+        the same arrays that produce the curves - so they always land exactly
+        on the plotted line, rather than being reused from a different split.
+        """
+        if is_binary:
+            pos_score_ = y_score_[:, 1]
+            macro_auroc_ = roc_auc_score(y_true_, pos_score_)
+            macro_auprc_ = average_precision_score(y_true_, pos_score_)
+        else:
+            y_true_bin_ = label_binarize(y_true_, classes=class_labels)
+            macro_auroc_ = roc_auc_score(y_true_, y_score_, average="macro", multi_class="ovr")
+            macro_auprc_ = average_precision_score(y_true_bin_, y_score_, average="macro")
+
+        operating_points_ = []
+
+        if is_binary:
+            fpr, tpr, _ = roc_curve(y_true_, pos_score_)
+            ax_roc_.plot(fpr, tpr, label=f"Class {int(class_labels[1]) + 1} (AUROC={macro_auroc_:.3f})")
+
+            precision, recall, _ = precision_recall_curve(y_true_, pos_score_)
+            ax_pr_.plot(recall, precision, label=f"Class {int(class_labels[1]) + 1} (AUPRC={macro_auprc_:.3f})")
+
+            if annotate_threshold and decision_thresholds is not None:
+                thr = float(decision_thresholds)
+                y_at_thr = (pos_score_ >= thr).astype(np.int64)
+                op_precision = precision_score(y_true_, y_at_thr, zero_division=0)
+                op_recall = recall_score(y_true_, y_at_thr, zero_division=0)
+                operating_points_.append(
+                    (op_recall, op_precision, f"Class {int(class_labels[1]) + 1} thr={thr:.3f}")
+                )
+        else:
+            for i, class_label in enumerate(class_labels):
+                fpr, tpr, _ = roc_curve(y_true_bin_[:, i], y_score_[:, i])
+                class_auroc = roc_auc_score(y_true_bin_[:, i], y_score_[:, i])
+                ax_roc_.plot(fpr, tpr, label=f"Class {int(class_label) + 1} (AUROC={class_auroc:.3f})")
+
+                precision, recall, _ = precision_recall_curve(y_true_bin_[:, i], y_score_[:, i])
+                class_auprc = average_precision_score(y_true_bin_[:, i], y_score_[:, i])
+                ax_pr_.plot(recall, precision, label=f"Class {int(class_label) + 1} (AUPRC={class_auprc:.3f})")
+
+                if annotate_threshold and decision_thresholds is not None:
+                    thr = float(decision_thresholds[i])
+                    y_at_thr = (y_score_[:, i] >= thr).astype(np.int64)
+                    op_precision = precision_score(y_true_bin_[:, i], y_at_thr, zero_division=0)
+                    op_recall = recall_score(y_true_bin_[:, i], y_at_thr, zero_division=0)
+                    operating_points_.append(
+                        (op_recall, op_precision, f"Class {int(class_label) + 1} thr={thr:.3f}")
+                    )
+
+        ax_roc_.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Chance")
+        ax_roc_.set_xlabel("False Positive Rate")
+        ax_roc_.set_ylabel("True Positive Rate")
+        ax_roc_.set_title(f"ROC curves (macro AUROC={macro_auroc_:.3f})")
+        ax_roc_.legend(fontsize=8)
+        ax_roc_.grid(linestyle="dashed")
+
+        # Mark the threshold(s) chosen on the validation set, so the PR curve
+        # shows where the deployed decision rule actually sits on the tradeoff.
+        for j, (op_recall, op_precision, op_label) in enumerate(operating_points_):
+            ax_pr_.scatter(
+                op_recall, op_precision,
+                marker="o", s=40, color="black", zorder=5,
+                label="Selected threshold" if j == 0 else None,
+            )
+            ax_pr_.annotate(
+                op_label, (op_recall, op_precision),
+                textcoords="offset points", xytext=(6, -8), fontsize=7,
+            )
+
+        ax_pr_.set_xlabel("Recall")
+        ax_pr_.set_ylabel("Precision")
+        ax_pr_.set_title(f"Precision-Recall curves (macro AUPRC={macro_auprc_:.3f})")
+        ax_pr_.legend(fontsize=8)
+        ax_pr_.grid(linestyle="dashed")
+
+        return macro_auroc_, macro_auprc_
+
+    # Plot one-vs-rest ROC and Precision-Recall curves, one line per class,
+    # for the test set (the split the reported metrics come from). No
+    # threshold markers here - the decision threshold was chosen on the
+    # validation set, not this curve, so a marker here doesn't reflect an
+    # actual decision made from this data.
+    fig, (ax_roc, ax_pr) = plt.subplots(1, 2, figsize=(12, 5))
+    macro_auroc, macro_auprc = _plotRocPr(y_true, y_score, ax_roc, ax_pr, annotate_threshold=False)
+    fig.suptitle("Test set")
 
     print(f"\nMacro-average AUROC: {macro_auroc:.4f}")
     print(f"Macro-average AUPRC: {macro_auprc:.4f}")
 
-    # Plot one-vs-rest ROC and Precision-Recall curves, one line per class.
-    fig, (ax_roc, ax_pr) = plt.subplots(1, 2, figsize=(12, 5))
-
-    if is_binary:
-        fpr, tpr, _ = roc_curve(y_true, pos_score)
-        ax_roc.plot(fpr, tpr, label=f"Class {int(class_labels[1]) + 1} (AUROC={macro_auroc:.3f})")
-
-        precision, recall, _ = precision_recall_curve(y_true, pos_score)
-        ax_pr.plot(recall, precision, label=f"Class {int(class_labels[1]) + 1} (AUPRC={macro_auprc:.3f})")
-    else:
-        for i, class_label in enumerate(class_labels):
-            fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_score[:, i])
-            class_auroc = roc_auc_score(y_true_bin[:, i], y_score[:, i])
-            ax_roc.plot(fpr, tpr, label=f"Class {int(class_label) + 1} (AUROC={class_auroc:.3f})")
-
-            precision, recall, _ = precision_recall_curve(y_true_bin[:, i], y_score[:, i])
-            class_auprc = average_precision_score(y_true_bin[:, i], y_score[:, i])
-            ax_pr.plot(recall, precision, label=f"Class {int(class_label) + 1} (AUPRC={class_auprc:.3f})")
-
-    ax_roc.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Chance")
-    ax_roc.set_xlabel("False Positive Rate")
-    ax_roc.set_ylabel("True Positive Rate")
-    ax_roc.set_title(f"ROC curves (macro AUROC={macro_auroc:.3f})")
-    ax_roc.legend(fontsize=8)
-    ax_roc.grid(linestyle="dashed")
-
-    ax_pr.set_xlabel("Recall")
-    ax_pr.set_ylabel("Precision")
-    ax_pr.set_title(f"Precision-Recall curves (macro AUPRC={macro_auprc:.3f})")
-    ax_pr.legend(fontsize=8)
-    ax_pr.grid(linestyle="dashed")
-
     plt.tight_layout()
     plt.savefig(f"{prefix}_{roc_suffix}.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+    # Also plot the validation-set curves, when given - the decision
+    # threshold(s) were chosen on validation data, so that's the only curve
+    # where a threshold marker reflects an actual decision made from the data.
+    if val_true is not None and val_logits is not None:
+        y_val_score = torch.softmax(val_logits, dim=1).numpy()
+        fig_val, (ax_roc_val, ax_pr_val) = plt.subplots(1, 2, figsize=(12, 5))
+        val_auroc, val_auprc = _plotRocPr(val_true, y_val_score, ax_roc_val, ax_pr_val)
+        fig_val.suptitle("Validation set (threshold selection)")
+
+        print(f"\nValidation macro AUROC: {val_auroc:.4f}")
+        print(f"Validation macro AUPRC: {val_auprc:.4f}")
+
+        plt.tight_layout()
+        plt.savefig(f"{prefix}_{roc_suffix}_val.png", dpi=150, bbox_inches="tight")
+        plt.show()
 
 
 
@@ -1244,12 +1405,56 @@ def runCrossValidatedModelSelection(task, model_type, output_prefix, roc_suffix)
         torch.load(checkpoint_path, map_location=device, weights_only=True)
     )
 
-    y_pred, y_true, all_logits = performTestingLoop(best_model, test_loader, device)
-    test_score = float(balanced_accuracy_score(y_true, y_pred))
     class_labels = np.unique(y)
+    is_binary = len(class_labels) == 2
+
+    # Threshold is selected on the validation set (natural class distribution,
+    # never oversampled or trained on) and then frozen before it ever touches
+    # the test set.
+    val_logits, val_targets = performInferenceLoop(best_model, val_loader, device)
+    y_val_true = val_targets.numpy()
+    y_val_score = torch.softmax(val_logits, dim=1).numpy()
+
+    test_logits, test_targets = performInferenceLoop(best_model, test_loader, device)
+    y_true = test_targets.numpy()
+    y_test_score = torch.softmax(test_logits, dim=1).numpy()
+
+    if is_binary:
+        threshold, best_fbeta, thr_precision, thr_recall = chooseThresholdMaxFbeta(
+            y_val_true, y_val_score[:, 1], beta=BINARY_THRESHOLD_BETA
+        )
+        print(
+            f"\nValidation-selected decision threshold "
+            f"(F{BINARY_THRESHOLD_BETA:g}-optimal, recall-prioritized): "
+            f"{threshold:.4f} (F{BINARY_THRESHOLD_BETA:g}={best_fbeta:.4f}, "
+            f"precision={thr_precision:.4f}, recall={thr_recall:.4f})"
+        )
+        y_pred = (y_test_score[:, 1] >= threshold).astype(np.int64)
+        threshold_info = {"beta": BINARY_THRESHOLD_BETA, "threshold": threshold}
+        decision_thresholds = threshold
+    else:
+        thresholds, fbetas, precisions, recalls = chooseMulticlassThresholds(
+            y_val_true, y_val_score, class_labels, beta=MULTICLASS_THRESHOLD_BETA
+        )
+        print(
+            f"\nValidation-selected per-class decision thresholds "
+            f"(F{MULTICLASS_THRESHOLD_BETA:g}-optimal, balanced):"
+        )
+        for label, thr, fb, prec, rec in zip(class_labels, thresholds, fbetas, precisions, recalls):
+            print(
+                f"  class {int(label) + 1}: threshold={thr:.4f}, "
+                f"F{MULTICLASS_THRESHOLD_BETA:g}={fb:.4f}, precision={prec:.4f}, recall={rec:.4f}"
+            )
+        y_pred = applyMulticlassThresholds(y_test_score, thresholds)
+        threshold_info = {"beta": MULTICLASS_THRESHOLD_BETA, "thresholds": thresholds.tolist()}
+        decision_thresholds = thresholds
+
+    test_score = float(balanced_accuracy_score(y_true, y_pred))
     performMetrics(
-        y_true, y_pred, all_logits, class_labels,
+        y_true, y_pred, test_logits, class_labels,
         prefix=output_prefix, roc_suffix=roc_suffix,
+        decision_thresholds=decision_thresholds,
+        val_true=y_val_true, val_logits=val_logits,
     )
 
     report = {
@@ -1258,6 +1463,7 @@ def runCrossValidatedModelSelection(task, model_type, output_prefix, roc_suffix)
         "lambda_star": best_params,
         "mean_cv_validation_loss": study.best_value,
         "best_fold_scores": study.best_trial.user_attrs["fold_scores"],
+        "decision_threshold": threshold_info,
         "test_performance_indicator": "balanced_accuracy",
         "test_balanced_accuracy": test_score,
         "split_sizes": {

@@ -1,3 +1,5 @@
+from datetime import time
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -390,8 +392,11 @@ def performTrainingLoop(
     val_losses = []
     best_val_loss = float("inf")
     best_val_epoch = 0
+    time_per_epoch = []
 
     for epoch in range(EPOCHS):
+        start_time = time.time() # Start time per epoch
+
         model.train()
 
         train_loss = 0.0
@@ -436,23 +441,27 @@ def performTrainingLoop(
             val_loss /= len(val_loader)
             val_losses.append(val_loss)
 
-            #save best validation loss use later; protects against overfitting
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_val_epoch = epoch
-                torch.save(model.state_dict(), "best_model.pth")
+        end_time = time.time() #timestamp 
+        time_per_epoch.append(end_time - start_time) # Appends the time per epoch
 
 
-            print(
-                f"Epoch: {epoch + 1:3d} | "
-                f"Train loss: {train_loss:.8f}"
-                f" | "
-                f"Val loss: {val_loss:.8f}"
-                f" | "
-                f"Best Val loss: {best_val_loss:.8f}"
-                f" | "
-                f"Best Val epoch: {best_val_epoch + 1}"
-            )
+        #save best validation loss use later; protects against overfitting
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_val_epoch = epoch
+            torch.save(model.state_dict(), "best_model.pth")
+
+
+        print(
+            f"Epoch: {epoch + 1:3d} | "
+            f"Train loss: {train_loss:.8f}"
+            f" | "
+            f"Val loss: {val_loss:.8f}"
+            f" | "
+            f"Best Val loss: {best_val_loss:.8f}"
+            f" | "
+            f"Best Val epoch: {best_val_epoch + 1}"
+        )
 
         if epoch == best_val_epoch + EARLY_STOP_NO_IMPROVEMENT: #early stopping if we haven't had a best val epoch in EARLY_STOP_NO_IMPROVEMENT epochs
             print("No reduction in validation loss in 10 epochs. Stopping training early.")

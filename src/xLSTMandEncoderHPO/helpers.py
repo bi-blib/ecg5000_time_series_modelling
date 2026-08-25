@@ -9,6 +9,7 @@ from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
@@ -54,7 +55,7 @@ EARLY_STOP_NO_IMPROVEMENT = 10
 # Optuna HPO settings. Trials run on a smaller epoch budget than the final
 # training run so a full search finishes in reasonable time on CPU; the
 # winning config is then retrained with the full EPOCHS budget.
-N_TRIALS = 25
+N_TRIALS = 20
 HPO_EPOCHS = 40
 HPO_EARLY_STOP_NO_IMPROVEMENT = 8
 
@@ -1109,6 +1110,12 @@ def crossValidatedScore(params, X_development, y_development, folds, device, tri
         X_val = scaler.transform(X_development[val_index]).astype(np.float32)
         y_train, y_val = y_development[train_index], y_development[val_index]
 
+        # Duplicate minority-class rows in the training fold only; the
+        # validation fold keeps its natural distribution so the CV score
+        # still reflects real-world performance.
+        ros = RandomOverSampler(random_state=RANDOM_STATE)
+        X_train, y_train = ros.fit_resample(X_train, y_train)
+
         setSeed(RANDOM_STATE + fold_number)
         train_loader = _loader(X_train, y_train, params["batch_size"], True)
         val_loader = _loader(X_val, y_val, params["batch_size"], False)
@@ -1118,7 +1125,9 @@ def crossValidatedScore(params, X_development, y_development, folds, device, tri
             train_loader,
             val_loader,
             device,
-            getCriterion(y_train, device),
+            # RandomOverSampler already balances the training distribution;
+            # also class-weighting the loss would over-correct.
+            nn.CrossEntropyLoss(),
             lr=params["lr"],
             weight_decay=params["weight_decay"],
             epochs=HPO_EPOCHS,
@@ -1191,18 +1200,29 @@ def runCrossValidatedModelSelection(task, model_type, output_prefix, roc_suffix)
     X_val_scaled = scaler.transform(X_val).astype(np.float32)
     X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
+    # Duplicate minority-class rows in the training set only. The
+    # validation and test sets retain their natural class distributions.
+    ros = RandomOverSampler(random_state=RANDOM_STATE)
+    X_train_scaled, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+    print(
+        "Training class counts before/after oversampling:",
+        np.bincount(y_train), "->", np.bincount(y_train_ros),
+    )
+
     input_size = 1
     n_classes = len(np.unique(y))
     n_tokens = X.shape[1]
 
     train_loader, val_loader, test_loader = getLoadersOptuna(
         X_train_scaled, X_val_scaled, X_test_scaled,
-        y_train, y_val, y_test,
+        y_train_ros, y_val, y_test,
         batch_size=best_params["batch_size"],
     )
 
     model = buildModel(best_params, input_size, n_classes, n_tokens, device)
-    criterion = getCriterion(y_train=y_train, device=device)
+    # RandomOverSampler already balances the training distribution; also
+    # class-weighting the loss would over-correct.
+    criterion = nn.CrossEntropyLoss()
 
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Best model has {num_params} trainable parameters.")

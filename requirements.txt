@@ -5,7 +5,7 @@ scikit-learn==1.6.1
 
 # Evaluation, plotting, and exploratory analysis
 matplotlib==3.9.4
-imbalanced-learn==0.12.4
+imbalanced-learn==0.14.2
 pandas==2.3.3
 Pillow==11.3.0
 

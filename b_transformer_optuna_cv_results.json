@@ -1,0 +1,28 @@
+{
+  "task": "binary",
+  "model_type": "transformer",
+  "lambda_star": {
+    "d_model": 64,
+    "n_heads": 2,
+    "num_layers": 1,
+    "dim_ff": 128,
+    "lr": 0.001331121608073689,
+    "weight_decay": 1.2087541473056965e-06,
+    "batch_size": 32,
+    "model_type": "transformer",
+    "qkv_proj_blocksize": 4
+  },
+  "mean_cv_validation_loss": 0.0705678543069238,
+  "best_fold_scores": [
+    0.0637963689025629,
+    0.0773393397112847
+  ],
+  "test_performance_indicator": "balanced_accuracy",
+  "test_balanced_accuracy": 0.9846225352640765,
+  "split_sizes": {
+    "development": 2000,
+    "train": 1000,
+    "validation": 1000,
+    "test": 3000
+  }
+}

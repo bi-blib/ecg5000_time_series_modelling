@@ -1,4 +1,4 @@
-from datetime import time
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -191,7 +191,6 @@ class SLSTMClassifier(nn.Module):
             num_blocks:int, # number of layers
             num_head:int,
             context_length:int,
-            conv1d_length: int,
             conv1d_kernel_size: int,
     ):
         super().__init__()
@@ -204,11 +203,11 @@ class SLSTMClassifier(nn.Module):
                     num_heads=num_head,
                     conv1d_kernel_size=conv1d_kernel_size,
                     backend="vanilla" #vanilla = Pytorch GPU allocation, cuda = custom cuda kernel )
+                ),
             ),
             context_length=context_length, 
             num_blocks=num_blocks, 
             embedding_dim=d_model, 
-        )
         )
 
         self.slstm = xLSTMBlockStack(xlstm_config) 
@@ -238,7 +237,6 @@ class XLSTMClassifier(nn.Module):
                 num_blocks:int, # number of layers
                 num_head:int,
                 context_length:int,
-                conv1d_length: int,
                 conv1d_kernel_size: int,
                 qkv_proj_blocksize:int, 
         ):
@@ -639,5 +637,3 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
     plt.tight_layout()
     plt.savefig(f"{prefix}_{roc_suffix}.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-

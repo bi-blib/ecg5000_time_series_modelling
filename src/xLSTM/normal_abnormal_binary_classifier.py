@@ -1,6 +1,9 @@
 import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
+from imblearn.over_sampling import RandomOverSampler
+
+
 
 from helpers import *
 
@@ -26,11 +29,23 @@ def main():
     X_val_scaled = scaler.transform(X_val).astype(np.float32)
     X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
+    # Duplicate minority-class observations in the training set only.  The
+    # validation and test sets retain their natural class distributions.
+    ros = RandomOverSampler(random_state=42)
+    X_train_ros, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+
+    print(
+        "Training class counts before/after oversampling:",
+        np.bincount(y_train),
+        "->",
+        np.bincount(y_train_ros),
+    )
+
     train_loader, val_loader, test_loader = getLoaders(
-        X_train_scaled=X_train_scaled,
+        X_train_scaled=X_train_ros,
         X_val_scaled=X_val_scaled,
         X_test_scaled=X_test_scaled,
-        y_train=y_train,
+        y_train=y_train_ros,
         y_val=y_val,
         y_test=y_test
     )
@@ -62,7 +77,10 @@ def main():
     print(f"Model has {num_params} trainable parameters.")
     
     # Loss function
-    criterion = getCriterion(y_train=y_train, device=device)
+    # RandomOverSampler already balances the training distribution.  Applying
+    # weights computed from the original labels as well would over-correct the
+    # minority class, so use an unweighted loss.
+    criterion = torch.nn.CrossEntropyLoss()
 
     ### Training loop
     train_losses, val_losses = performTrainingLoop(model, train_loader, val_loader, device, criterion)

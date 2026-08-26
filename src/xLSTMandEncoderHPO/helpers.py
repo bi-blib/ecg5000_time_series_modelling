@@ -50,7 +50,7 @@ QVK_PROJ_BLOCKSIZE=4
 NUM_LAYERS = 1
 LR = 0.0001
 EPOCHS = 300
-EARLY_STOP_NO_IMPROVEMENT = 10
+EARLY_STOP_NO_IMPROVEMENT = 25
 
 # Optuna HPO settings. Trials run on a smaller epoch budget than the final
 # training run so a full search finishes in reasonable time on CPU; the
@@ -59,9 +59,20 @@ N_TRIALS = 20
 HPO_EPOCHS = 40
 HPO_EARLY_STOP_NO_IMPROVEMENT = 8
 
-# Cross-validated model selection settings (runCrossValidatedModelSelection).
-# TEST_FRACTION is deliberately inverted from the usual small-test-set
-# convention: only 40% of the data is pooled for CV/HPO, 60% is held out.
+# MedianPruner for the HPO objective (runHPOModelSelection): a trial is
+# pruned if its val loss at a given epoch is worse than the median of other
+# trials' values at that same epoch.
+#   n_startup_trials: trials that always run to completion, so there is a
+#   distribution to compare against before pruning starts.
+#   n_warmup_steps: epochs within every trial that are never pruned, so a
+#   config that starts slow isn't killed before it has any signal.
+HPO_PRUNER_N_STARTUP_TRIALS = 5
+HPO_PRUNER_N_WARMUP_STEPS = 10
+
+# Cross-validated model selection settings (runHPOModelSelection,
+# runFixedParamsModelSelection). TEST_FRACTION is deliberately inverted from
+# the usual small-test-set convention: only 40% of the data is pooled for
+# HPO/CV, 60% is held out.
 RANDOM_STATE = 42
 N_SPLITS = 5
 TEST_FRACTION = 0.60
@@ -71,7 +82,7 @@ TEST_FRACTION = 0.60
 # evaluated every epoch, so this is the cheapest speedup available on CPU.
 EVAL_BATCH_SIZE = 256
 
-# Decision-threshold selection (runCrossValidatedModelSelection), done on the
+# Decision-threshold selection (runFinalModelSelection), done on the
 # validation set and then frozen before touching the test set.
 #   Binary: F-beta with beta>1 weights recall over precision, so missing an
 #   abnormal ECG (false negative) costs more than a false alarm.
@@ -1254,17 +1265,66 @@ def makeFolds(X, y):
     return list(splitter.split(X, y))
 
 
-def crossValidatedScore(params, X_development, y_development, folds, device, trial):
-    """Return mean five-fold validation loss and all fold-level scores.
+def scoreHyperparams(params, X_train, y_train, X_val, y_val, device, trial):
+    """Train one Optuna trial's config on a single fixed train/val split of the
+    development pool and return its best validation loss.
 
-    Each fold trains with trial=None (no per-epoch pruning): performTrainingLoopOptuna
-    reports (val_loss, epoch) to trial.report(), and epoch resets to 0 every fold,
-    so reporting across folds on the same trial would violate Optuna's requirement
-    that a trial's reported steps increase monotonically.
+    trial is passed through to performTrainingLoopOptuna (not None): with
+    exactly one split per trial the epoch counter increases monotonically for
+    the whole trial (unlike the old per-fold CV objective, where the epoch
+    counter reset every fold), so trial.report/should_prune can safely act on
+    it and unpromising trials get pruned instead of burning the full budget.
     """
-    fold_scores = []
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train).astype(np.float32)
+    X_val_scaled = scaler.transform(X_val).astype(np.float32)
+
+    # Duplicate minority-class rows in the training split only; the
+    # validation split keeps its natural distribution so the score still
+    # reflects real-world performance.
+    ros = RandomOverSampler(random_state=RANDOM_STATE)
+    X_train_scaled, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+
+    n_classes = len(np.unique(np.concatenate([y_train, y_val])))
+    n_tokens = X_train.shape[1]
+
+    # Constant seed (not trial-dependent) so every trial sees the same batch
+    # shuffle order - isolates the effect of the hyperparameters from the
+    # effect of randomness in data order.
+    setSeed(RANDOM_STATE)
+    train_loader = _loader(X_train_scaled, y_train_ros, params["batch_size"], True)
+    val_loader = _loader(X_val_scaled, y_val, params["batch_size"], False)
+    model = buildModel(params, 1, n_classes, n_tokens, device)
+
+    _, val_losses = performTrainingLoopOptuna(
+        model, train_loader, val_loader, device,
+        # RandomOverSampler already balances the training distribution; also
+        # class-weighting the loss would over-correct.
+        nn.CrossEntropyLoss(),
+        lr=params["lr"],
+        weight_decay=params["weight_decay"],
+        epochs=HPO_EPOCHS,
+        early_stop_patience=HPO_EARLY_STOP_NO_IMPROVEMENT,
+        verbose=False,
+        trial=trial,
+    )
+    return float(min(val_losses))
+
+
+def runFoldCV(params, X_development, y_development, folds, device, output_prefix):
+    """Train one model per fold at the full EPOCHS budget (not the HPO
+    budget), checkpointing each fold's best-val-loss weights to
+    '{output_prefix}_fold{n}_model.pth'.
+
+    Returns a list of per-fold dicts (fold, val_loss, checkpoint_path,
+    val_loader, scaler) - the val_loader/scaler ride along so the caller can
+    score the winning fold's model on its own validation split and on the
+    test set without re-deriving either from indices.
+    """
     n_classes = len(np.unique(y_development))
     n_tokens = X_development.shape[1]
+    fold_results = []
+
     for fold_number, (train_index, val_index) in enumerate(folds, start=1):
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_development[train_index]).astype(np.float32)
@@ -1272,7 +1332,7 @@ def crossValidatedScore(params, X_development, y_development, folds, device, tri
         y_train, y_val = y_development[train_index], y_development[val_index]
 
         # Duplicate minority-class rows in the training fold only; the
-        # validation fold keeps its natural distribution so the CV score
+        # validation fold keeps its natural distribution so the fold score
         # still reflects real-world performance.
         ros = RandomOverSampler(random_state=RANDOM_STATE)
         X_train, y_train = ros.fit_resample(X_train, y_train)
@@ -1281,139 +1341,91 @@ def crossValidatedScore(params, X_development, y_development, folds, device, tri
         train_loader = _loader(X_train, y_train, params["batch_size"], True)
         val_loader = _loader(X_val, y_val, params["batch_size"], False)
         model = buildModel(params, 1, n_classes, n_tokens, device)
+
+        checkpoint_path = f"{output_prefix}_fold{fold_number}_model.pth"
         _, val_losses = performTrainingLoopOptuna(
-            model,
-            train_loader,
-            val_loader,
-            device,
-            # RandomOverSampler already balances the training distribution;
-            # also class-weighting the loss would over-correct.
+            model, train_loader, val_loader, device,
             nn.CrossEntropyLoss(),
             lr=params["lr"],
             weight_decay=params["weight_decay"],
-            epochs=HPO_EPOCHS,
-            early_stop_patience=HPO_EARLY_STOP_NO_IMPROVEMENT,
+            epochs=EPOCHS,
+            early_stop_patience=EARLY_STOP_NO_IMPROVEMENT,
+            checkpoint_path=checkpoint_path,
             verbose=False,
             trial=None,
-            label=f"Trial {trial.number + 1}/{N_TRIALS} fold {fold_number}/{N_SPLITS}",
+            label=f"Fold {fold_number}/{N_SPLITS}",
             leave=False,
         )
         score = float(min(val_losses))
-        fold_scores.append(score)
         print(f"  fold {fold_number}/{N_SPLITS}: validation loss={score:.6f}")
-    return float(np.mean(fold_scores)), fold_scores
+        fold_results.append({
+            "fold": fold_number,
+            "val_loss": score,
+            "checkpoint_path": checkpoint_path,
+            "val_loader": val_loader,
+            "scaler": scaler,
+        })
+
+    return fold_results
 
 
-def runCrossValidatedModelSelection(task, model_type, output_prefix, roc_suffix):
-    """Select the winning hyperparameters via 5-fold CV over a 40% dev pool,
-    refit on a fresh split of that pool, then test once on the held-out 60%.
+def runFinalModelSelection(task, model_type, output_prefix, roc_suffix, params,
+                            X, y, X_development, y_development, X_test, y_test,
+                            folds, device, extra_report_fields=None):
+    """5-fold CV over the dev pool at the full training budget; keep the
+    single fold whose model had the lowest validation loss ("best fold
+    model") as the deployed model, evaluate it once on the untouched test
+    set, write the JSON report.
+
+    Shared tail of runHPOModelSelection (params = HPO winner) and
+    runFixedParamsModelSelection (params = hand-picked dict) - both just
+    build params/folds differently and hand off here.
     """
-    setSeed(RANDOM_STATE)
-    torch.set_num_threads(NUM_THREADS)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Device:", device)
-    print("Model type:", model_type)
-
-    X, y = loadTaskData(task)
-
-    # The test set is reserved before CV and never passed to an objective.
-    X_development, X_test, y_development, y_test = train_test_split(
-        X, y, test_size=TEST_FRACTION, stratify=y, random_state=RANDOM_STATE
-    )
-    print(f"Development pool shape: {X_development.shape} (used for {N_SPLITS}-fold CV)")
-    print(f"Held-out test shape: {X_test.shape}")
-    folds = makeFolds(X_development, y_development)
-
-    def objective(trial):
-        params = suggestHyperparams(trial, model_type)
-        print(f"\nTrial {trial.number + 1}/{N_TRIALS}: {params}")
-        mean_score, fold_scores = crossValidatedScore(
-            params, X_development, y_development, folds, device, trial
-        )
-        trial.set_user_attr("fold_scores", fold_scores)
-        trial.set_user_attr("fold_std", float(np.std(fold_scores, ddof=1)))
-        print(
-            f"  mean validation loss={mean_score:.6f} +/- "
-            f"{trial.user_attrs['fold_std']:.6f}"
-        )
-        return mean_score
-
-    study = optuna.create_study(
-        direction="minimize",
-        sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
-    )
-    study.optimize(objective, n_trials=N_TRIALS)
-    best_params = resolveBestParams(study, model_type)
-    print("\nSelected lambda*:", best_params)
-    print(f"Mean five-fold validation loss: {study.best_value:.6f}")
-
-    # Fresh train/validation division of the dev pool, matching the 5-fold
-    # proportions used during CV (test_size = 1/N_SPLITS).
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_development,
-        y_development,
-        test_size=1 / N_SPLITS,
-        stratify=y_development,
-        random_state=RANDOM_STATE + 1,
-    )
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train).astype(np.float32)
-    X_val_scaled = scaler.transform(X_val).astype(np.float32)
-    X_test_scaled = scaler.transform(X_test).astype(np.float32)
-
-    # Duplicate minority-class rows in the training set only. The
-    # validation and test sets retain their natural class distributions.
-    ros = RandomOverSampler(random_state=RANDOM_STATE)
-    X_train_scaled, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+    fold_results = runFoldCV(params, X_development, y_development, folds, device, output_prefix)
+    fold_val_losses = [r["val_loss"] for r in fold_results]
+    best = min(fold_results, key=lambda r: r["val_loss"])
+    fold_std = float(np.std(fold_val_losses, ddof=1))
     print(
-        "Training class counts before/after oversampling:",
-        np.bincount(y_train), "->", np.bincount(y_train_ros),
+        f"\nFold validation losses: {[f'{s:.6f}' for s in fold_val_losses]}\n"
+        f"Best fold: {best['fold']}/{N_SPLITS} (val loss={best['val_loss']:.6f}), "
+        f"mean={np.mean(fold_val_losses):.6f} +/- {fold_std:.6f}"
     )
+
+    # Keep only the winning fold's checkpoint - it is the single source of
+    # truth for "checkpoint_path" in the JSON report - and delete the rest to
+    # avoid five checkpoints of clutter per run.
+    for r in fold_results:
+        if r is not best:
+            Path(r["checkpoint_path"]).unlink(missing_ok=True)
 
     input_size = 1
     n_classes = len(np.unique(y))
     n_tokens = X.shape[1]
 
-    train_loader, val_loader, test_loader = getLoadersOptuna(
-        X_train_scaled, X_val_scaled, X_test_scaled,
-        y_train_ros, y_val, y_test,
-        batch_size=best_params["batch_size"],
-    )
-
-    model = buildModel(best_params, input_size, n_classes, n_tokens, device)
-    # RandomOverSampler already balances the training distribution; also
-    # class-weighting the loss would over-correct.
-    criterion = nn.CrossEntropyLoss()
-
-    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Best model has {num_params} trainable parameters.")
-
-    checkpoint_path = f"{output_prefix}_best_model.pth"
-    train_losses, val_losses = performTrainingLoopOptuna(
-        model, train_loader, val_loader, device, criterion,
-        lr=best_params["lr"],
-        weight_decay=best_params["weight_decay"],
-        epochs=EPOCHS,
-        early_stop_patience=EARLY_STOP_NO_IMPROVEMENT,
-        checkpoint_path=checkpoint_path,
-        verbose=True,
-    )
-    plotLossCurve(train_losses, val_losses, save_path=f"{output_prefix}_loss.png")
-
-    best_model = buildModel(best_params, input_size, n_classes, n_tokens, device)
+    best_model = buildModel(params, input_size, n_classes, n_tokens, device)
     best_model.load_state_dict(
-        torch.load(checkpoint_path, map_location=device, weights_only=True)
+        torch.load(best["checkpoint_path"], map_location=device, weights_only=True)
     )
+
+    num_params = sum(p.numel() for p in best_model.parameters() if p.requires_grad)
+    print(f"Best fold model has {num_params} trainable parameters.")
 
     class_labels = np.unique(y)
     is_binary = len(class_labels) == 2
 
-    # Threshold is selected on the validation set (natural class distribution,
-    # never oversampled or trained on) and then frozen before it ever touches
-    # the test set.
-    val_logits, val_targets = performInferenceLoop(best_model, val_loader, device)
+    # Threshold is selected on the winning fold's own validation split
+    # (natural class distribution, never oversampled or trained on) and then
+    # frozen before it ever touches the test set.
+    val_logits, val_targets = performInferenceLoop(best_model, best["val_loader"], device)
     y_val_true = val_targets.numpy()
     y_val_score = torch.softmax(val_logits, dim=1).numpy()
+
+    # The test set must be scaled with the WINNING fold's own scaler (each
+    # fold fit its own in runFoldCV) - reusing a different fold's scaler
+    # would leak that fold's train distribution into the test transform.
+    eval_batch_size = max(params["batch_size"], EVAL_BATCH_SIZE)
+    X_test_scaled = best["scaler"].transform(X_test).astype(np.float32)
+    test_loader = _loader(X_test_scaled, y_test, eval_batch_size, False)
 
     test_logits, test_targets = performInferenceLoop(best_model, test_loader, device)
     y_true = test_targets.numpy()
@@ -1457,23 +1469,116 @@ def runCrossValidatedModelSelection(task, model_type, output_prefix, roc_suffix)
         val_true=y_val_true, val_logits=val_logits,
     )
 
+    best_train_index, best_val_index = folds[best["fold"] - 1]
     report = {
         "task": task,
         "model_type": model_type,
-        "lambda_star": best_params,
-        "mean_cv_validation_loss": study.best_value,
-        "best_fold_scores": study.best_trial.user_attrs["fold_scores"],
+        "lambda_star": params,
+        "cv_fold_val_losses": fold_val_losses,
+        "cv_fold_val_loss_mean": float(np.mean(fold_val_losses)),
+        "cv_fold_val_loss_std": fold_std,
+        "best_fold": best["fold"],
+        "checkpoint_path": best["checkpoint_path"],
         "decision_threshold": threshold_info,
         "test_performance_indicator": "balanced_accuracy",
         "test_balanced_accuracy": test_score,
         "split_sizes": {
             "development": len(y_development),
-            "train": len(y_train),
-            "validation": len(y_val),
+            "best_fold_train": len(best_train_index),
+            "best_fold_validation": len(best_val_index),
             "test": len(y_test),
         },
     }
+    if extra_report_fields:
+        report.update(extra_report_fields)
+
     Path(f"{output_prefix}_cv_results.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
     )
     return report
+
+
+def runHPOModelSelection(task, model_type, output_prefix, roc_suffix):
+    """Search hyperparameters with Optuna on a single train/val split of the
+    dev pool (fast, prunable), then hand the winner to runFinalModelSelection
+    for a proper 5-fold CV fit/evaluation.
+    """
+    setSeed(RANDOM_STATE)
+    torch.set_num_threads(NUM_THREADS)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
+    print("Model type:", model_type)
+
+    X, y = loadTaskData(task)
+
+    # The test set is reserved before HPO/CV and never passed to an objective.
+    X_development, X_test, y_development, y_test = train_test_split(
+        X, y, test_size=TEST_FRACTION, stratify=y, random_state=RANDOM_STATE
+    )
+    print(f"Development pool shape: {X_development.shape} (used for HPO + {N_SPLITS}-fold CV)")
+    print(f"Held-out test shape: {X_test.shape}")
+
+    # Single fixed split for HPO trials - same proportions as one CV fold
+    # (test_size = 1/N_SPLITS), computed once and reused by every trial
+    # instead of paying for N_SPLITS folds per trial.
+    X_hpo_train, X_hpo_val, y_hpo_train, y_hpo_val = train_test_split(
+        X_development, y_development,
+        test_size=1 / N_SPLITS, stratify=y_development, random_state=RANDOM_STATE + 1,
+    )
+
+    def objective(trial):
+        params = suggestHyperparams(trial, model_type)
+        print(f"\nTrial {trial.number + 1}/{N_TRIALS}: {params}")
+        score = scoreHyperparams(
+            params, X_hpo_train, y_hpo_train, X_hpo_val, y_hpo_val, device, trial
+        )
+        print(f"  validation loss={score:.6f}")
+        return score
+
+    study = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE),
+        pruner=optuna.pruners.MedianPruner(
+            n_startup_trials=HPO_PRUNER_N_STARTUP_TRIALS,
+            n_warmup_steps=HPO_PRUNER_N_WARMUP_STEPS,
+        ),
+    )
+    study.optimize(objective, n_trials=N_TRIALS)
+    best_params = resolveBestParams(study, model_type)
+    print("\nSelected lambda*:", best_params)
+    print(f"HPO single-split validation loss: {study.best_value:.6f}")
+
+    folds = makeFolds(X_development, y_development)
+    return runFinalModelSelection(
+        task, model_type, output_prefix, roc_suffix, best_params,
+        X, y, X_development, y_development, X_test, y_test, folds, device,
+        extra_report_fields={"hpo_validation_loss": study.best_value},
+    )
+
+
+def runFixedParamsModelSelection(task, model_type, output_prefix, roc_suffix, params):
+    """Same 5-fold CV final-model fit/evaluation as runHPOModelSelection's
+    tail, skipping the Optuna search - params is a hand-picked dict shaped
+    like buildModel expects (see suggestXLSTMHyperparams /
+    suggestTransformerHyperparams for key names, resolveBestParams for which
+    extra keys are needed, e.g. "model_type").
+    """
+    setSeed(RANDOM_STATE)
+    torch.set_num_threads(NUM_THREADS)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
+    print("Model type:", model_type)
+    print("Fixed params:", params)
+
+    X, y = loadTaskData(task)
+    X_development, X_test, y_development, y_test = train_test_split(
+        X, y, test_size=TEST_FRACTION, stratify=y, random_state=RANDOM_STATE
+    )
+    print(f"Development pool shape: {X_development.shape} (used for {N_SPLITS}-fold CV)")
+    print(f"Held-out test shape: {X_test.shape}")
+
+    folds = makeFolds(X_development, y_development)
+    return runFinalModelSelection(
+        task, model_type, output_prefix, roc_suffix, params,
+        X, y, X_development, y_development, X_test, y_test, folds, device,
+    )

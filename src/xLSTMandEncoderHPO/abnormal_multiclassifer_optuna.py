@@ -1,9 +1,9 @@
-from helpers import MODEL_TYPE, runCrossValidatedModelSelection
+from helpers import MODEL_TYPE, runHPOModelSelection
 
 
 def main():
     prefix = f"mc_{MODEL_TYPE}_optuna"
-    return runCrossValidatedModelSelection("multiclass", MODEL_TYPE, prefix, "roc")
+    return runHPOModelSelection("multiclass", MODEL_TYPE, prefix, "roc")
 
 
 if __name__ == "__main__":

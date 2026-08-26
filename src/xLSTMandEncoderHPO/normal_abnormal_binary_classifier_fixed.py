@@ -1,4 +1,5 @@
-from helpers import MODEL_TYPE, runFixedParamsModelSelection
+from config import MODEL_TYPE
+from model_selection import runFixedParamsModelSelection
 
 # Hand-picked starting hyperparameters, one dict per model_type so this file
 # keeps working if MODEL_TYPE is flipped in helpers.py without editing here.
@@ -11,12 +12,12 @@ FIXED_PARAMS = {
     "transformer": {
         "model_type": "transformer",
         "d_model": 64,
-        "n_heads": 4,
+        "n_heads": 2,
         "num_layers": 2,
-        "dim_ff": 128,
-        "lr": 3e-4,
-        "weight_decay": 1e-4,
-        "batch_size": 64,
+        "dim_ff": 256,
+        "lr": 0.002115429079726122,
+        "weight_decay": 0.005727904470799624,
+        "batch_size": 128,
     },
     "xlstm": {
         "model_type": "xlstm",

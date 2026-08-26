@@ -1,4 +1,5 @@
-from helpers import MODEL_TYPE, runHPOModelSelection
+from config import MODEL_TYPE
+from model_selection import runHPOModelSelection
 
 
 def main():

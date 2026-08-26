@@ -1,9 +1,15 @@
 """Shared MantisV2 model, data, training, and reporting helpers for ECG5000.
 
 This adapts ``sess15_classification.py`` to binary and abnormal-only multiclass
-ECG tasks with oversampling, early stopping, and complete metric reporting. The
-pretrained encoder is frozen and its embeddings are cached once, making live
-head training practical on CPU.
+ECG tasks, early stopping, and complete metric reporting. The pretrained encoder
+is frozen and its embeddings are cached once, making live head training practical
+on CPU.
+
+Oversampling strategy (applied to embeddings after extraction):
+- Binary task:     no oversampling — class distribution is already reasonable.
+- Multiclass task: +20 oversampling — each minority class is duplicated by 20
+                   extra samples (capped at the majority class count), which was
+                   found to give the best validation Macro F1 in a grid search.
 """
 
 import json
@@ -47,8 +53,8 @@ SEED = 42
 TARGET_LENGTH = 512
 BATCH_SIZE = 32
 EMBEDDING_BATCH_SIZE = 64
-LEARNING_RATE = 1e-4
-EPOCHS = 100
+LEARNING_RATE = 3e-4
+EPOCHS = 300
 EARLY_STOP_PATIENCE = 10
 
 TASK_METADATA = {
@@ -150,23 +156,50 @@ def load_ecg5000_task(task: str):
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def scale_and_oversample(X_train, y_train, X_val, X_test):
-    """Fit channel-wise scaling on train only, then oversample train only."""
+def scale_data(X_train, X_val, X_test):
+    """Fit channel-wise scaling on train only, and scale all splits."""
     scaler = StandardScaler()
     train_shape, val_shape, test_shape = X_train.shape, X_val.shape, X_test.shape
     X_train_scaled = scaler.fit_transform(X_train.reshape(-1, 1)).reshape(train_shape)
     X_val_scaled = scaler.transform(X_val.reshape(-1, 1)).reshape(val_shape)
     X_test_scaled = scaler.transform(X_test.reshape(-1, 1)).reshape(test_shape)
-
-    ros = RandomOverSampler(random_state=SEED)
-    X_train_ros, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
     return (
-        X_train_ros.astype(np.float32),
-        y_train_ros.astype(np.int64),
+        X_train_scaled.astype(np.float32),
         X_val_scaled.astype(np.float32),
         X_test_scaled.astype(np.float32),
         scaler,
     )
+
+
+# Number of extra samples added to each minority class for the multiclass task.
+_MC_OVERSAMPLE_AMOUNT = 20
+
+
+def apply_oversampling(
+    embeddings: torch.Tensor, targets: torch.Tensor, task: str
+) -> tuple:
+    """Apply the fixed oversampling strategy to training embeddings.
+
+    - Binary: no oversampling.
+    - Multiclass: each minority class gets +20 extra samples
+      (capped at the majority class size).
+    """
+    if task == "binary":
+        return embeddings, targets
+
+    y = targets.numpy()
+    class_counts = np.bincount(y)
+    majority_count = int(class_counts.max())
+    majority_cls = int(class_counts.argmax())
+
+    sampling_strategy = {
+        cls: (count if cls == majority_cls else min(count + _MC_OVERSAMPLE_AMOUNT, majority_count))
+        for cls, count in enumerate(class_counts)
+        if count > 0
+    }
+    ros = RandomOverSampler(sampling_strategy=sampling_strategy, random_state=SEED)
+    X_res, y_res = ros.fit_resample(embeddings.numpy(), y)
+    return torch.tensor(X_res, dtype=torch.float32), torch.tensor(y_res, dtype=torch.long)
 
 
 def signal_loader(signals, labels, batch_size, shuffle=False):
@@ -340,24 +373,22 @@ def run_task(task, extractor, device, args):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     X_train, y_train, X_val, y_val, X_test, y_test = load_ecg5000_task(task)
-    X_train_ros, y_train_ros, X_val_scaled, X_test_scaled, scaler = scale_and_oversample(
-        X_train, y_train, X_val, X_test
+    X_train_scaled, X_val_scaled, X_test_scaled, scaler = scale_data(
+        X_train, X_val, X_test
     )
     print(f"\nTask: {task}")
     print(f"Train/validation/test: {len(y_train)}/{len(y_val)}/{len(y_test)}")
-    print(
-        "Training class counts before/after oversampling:",
-        np.bincount(y_train),
-        "->",
-        np.bincount(y_train_ros),
-        flush=True,
-    )
+    print(f"Original training class counts: {np.bincount(y_train)}", flush=True)
 
+    # Extract embeddings from the original (un-oversampled) training signals.
+    # Oversampling is applied afterwards on the cheap embedding vectors, so the
+    # slow encoder forward pass runs only once.
     train_signals = signal_loader(
-        X_train_ros, y_train_ros, args.embedding_batch_size, shuffle=False
+        X_train_scaled, y_train, args.embedding_batch_size, shuffle=False
     )
     val_signals = signal_loader(X_val_scaled, y_val, args.embedding_batch_size)
     test_signals = signal_loader(X_test_scaled, y_test, args.embedding_batch_size)
+
     train_embeddings, train_targets = extract_embeddings(
         extractor, train_signals, device, f"{task} train"
     )
@@ -366,6 +397,13 @@ def run_task(task, extractor, device, args):
     )
     test_embeddings, test_targets = extract_embeddings(
         extractor, test_signals, device, f"{task} test"
+    )
+
+    # Apply the fixed oversampling strategy to the training embeddings.
+    train_embeddings, train_targets = apply_oversampling(train_embeddings, train_targets, task)
+    print(
+        f"Training class counts after oversampling: {np.bincount(train_targets.numpy())}",
+        flush=True,
     )
 
     generator = torch.Generator().manual_seed(SEED)
@@ -416,9 +454,10 @@ def run_task(task, extractor, device, args):
         "model": "MantisV2FrozenClassifier",
         "pretrained_model": "paris-noah/MantisV2",
         "representation": "final_cls_token",
+        "oversampling": "none" if task == "binary" else f"+{_MC_OVERSAMPLE_AMOUNT}",
         "split_sizes": {
             "train_original": int(len(y_train)),
-            "train_oversampled": int(len(y_train_ros)),
+            "train_after_oversampling": int(len(train_targets)),
             "validation": int(len(y_val)),
             "test": int(len(y_test)),
         },

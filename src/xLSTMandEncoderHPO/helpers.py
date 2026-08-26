@@ -1260,6 +1260,21 @@ def _loader(X, y, batch_size, shuffle):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
 
+def _multiclass_sampling_strategy(y):
+    class_counts = np.bincount(y)
+    majority_count = int(class_counts.max())
+    majority_class = int(class_counts.argmax())
+    return {
+        class_id: (
+            count
+            if class_id == majority_class
+            else min(count + 20, majority_count)
+        )
+        for class_id, count in enumerate(class_counts)
+        if count > 0
+    }
+
+
 def makeFolds(X, y):
     """Create the five disjoint folds reused by every Optuna trial."""
     splitter = StratifiedKFold(
@@ -1285,7 +1300,10 @@ def scoreHyperparams(params, X_train, y_train, X_val, y_val, device, trial):
     # Duplicate minority-class rows in the training split only; the
     # validation split keeps its natural distribution so the score still
     # reflects real-world performance.
-    ros = RandomOverSampler(random_state=RANDOM_STATE)
+    ros = RandomOverSampler(
+        sampling_strategy=_multiclass_sampling_strategy(y_train),
+        random_state=RANDOM_STATE,
+    )
     X_train_scaled, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
 
     n_classes = len(np.unique(np.concatenate([y_train, y_val])))
@@ -1301,8 +1319,7 @@ def scoreHyperparams(params, X_train, y_train, X_val, y_val, device, trial):
 
     _, val_losses = performTrainingLoopOptuna(
         model, train_loader, val_loader, device,
-        # RandomOverSampler already balances the training distribution; also
-        # class-weighting the loss would over-correct.
+        # Sampling and class-weighting together would over-correct the loss.
         nn.CrossEntropyLoss(),
         lr=params["lr"],
         weight_decay=params["weight_decay"],
@@ -1337,7 +1354,10 @@ def runFoldCV(params, X_development, y_development, folds, device, output_prefix
         # Duplicate minority-class rows in the training fold only; the
         # validation fold keeps its natural distribution so the fold score
         # still reflects real-world performance.
-        ros = RandomOverSampler(random_state=RANDOM_STATE)
+        ros = RandomOverSampler(
+            sampling_strategy=_multiclass_sampling_strategy(y_train),
+            random_state=RANDOM_STATE,
+        )
         X_train, y_train = ros.fit_resample(X_train, y_train)
 
         setSeed(RANDOM_STATE + fold_number)

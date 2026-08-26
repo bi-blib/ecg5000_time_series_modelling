@@ -15,3 +15,6 @@ optuna==4.9.0
 # xLSTM model family + HPO progress bars
 xlstm==2.0.5
 tqdm==4.70.0
+
+# Time-series foundation model classification
+mantis-tsfm==1.0.0

@@ -1,0 +1,297 @@
+(TUB) PS C:\Users\tjp00\Documents\Code\DL_TimeSeries_SummerSchool\ecg5000_time_series_modelling> & C:\Users\tjp00\miniconda3\envs\TUB\python.exe c:/Users/tjp00/Documents/Code/DL_TimeSeries_SummerSchool/ecg5000_time_series_modelling/src/xLSTMandEncoderHPO/runner_optuna.py
+Device: cpu
+Model type: transformer
+Development pool shape: (2000, 140) (used for HPO + 5-fold CV)
+Held-out test shape: (3000, 140)
+[I 2026-08-25 18:51:00,016] A new study created in memory with name: no-name-c8ae454f-9e6f-4470-b100-a0acee5133d2
+
+Trial 1/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.001331121608073689, 'weight_decay': 1.2087541473056965e-06, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 1/20: early-stopped after 10 epochs in 40.1s (4.01s/epoch) | best val loss 0.011448 @ epoch 2                                          
+  validation loss=0.011448
+[I 2026-08-25 18:51:43,690] Trial 0 finished with value: 0.011448176208607318 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.001331121608073689, 'weight_decay': 1.2087541473056965e-06, 'batch_size': 32}. Best is trial 0 with value: 0.011448176208607318.
+
+Trial 2/20: {'d_model': 128, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00012562773503807024, 'weight_decay': 6.672367170464208e-05, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 2/20: early-stopped after 23 epochs in 127.9s (5.56s/epoch) | best val loss 0.008711 @ epoch 15                                        
+  validation loss=0.008711
+[I 2026-08-25 18:53:51,648] Trial 1 finished with value: 0.00871059347767956 and parameters: {'d_model': 128, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00012562773503807024, 'weight_decay': 6.672367170464208e-05, 'batch_size': 32}. Best is trial 1 with value: 0.00871059347767956.
+
+Trial 3/20: {'d_model': 128, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 64, 'lr': 1.9634341572933304e-05, 'weight_decay': 0.0005456725485601478, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 3/20: early-stopped after 34 epochs in 941.3s (27.69s/epoch) | best val loss 0.045495 @ epoch 26                                       
+  validation loss=0.045495
+[I 2026-08-25 19:09:33,069] Trial 2 finished with value: 0.045494724065065384 and parameters: {'d_model': 128, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 64, 'lr': 1.9634341572933304e-05, 'weight_decay': 0.0005456725485601478, 'batch_size': 128}. Best is trial 1 with value: 0.00871059347767956.
+
+Trial 4/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.002115429079726122, 'weight_decay': 0.005727904470799624, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 4/20: early-stopped after 22 epochs in 335.3s (15.24s/epoch) | best val loss 0.003365 @ epoch 14                                       
+  validation loss=0.003365
+[I 2026-08-25 19:15:08,631] Trial 3 finished with value: 0.0033650978875812143 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.002115429079726122, 'weight_decay': 0.005727904470799624, 'batch_size': 128}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 5/20: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00042470585622618684, 'weight_decay': 3.6618192203924288e-06, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 5/20: early-stopped after 33 epochs in 233.5s (7.08s/epoch) | best val loss 0.010798 @ epoch 25                                        
+  validation loss=0.010798
+[I 2026-08-25 19:19:02,146] Trial 4 finished with value: 0.010798128292663023 and parameters: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00042470585622618684, 'weight_decay': 3.6618192203924288e-06, 'batch_size': 128}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 6/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 64, 'lr': 2.2264204303769678e-05, 'weight_decay': 0.0028340904295147754, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 6/20: pruned after 11 epochs in 91.5s (8.32s/epoch) | best val loss 0.032708 @ epoch 11                                                
+[I 2026-08-25 19:20:33,656] Trial 5 pruned. 
+
+Trial 7/20: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.00048287152161792117, 'weight_decay': 0.0012130221181165164, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 7/20: early-stopped after 15 epochs in 403.9s (26.93s/epoch) | best val loss 0.015075 @ epoch 7                                        
+  validation loss=0.015075
+[I 2026-08-25 19:27:17,572] Trial 6 finished with value: 0.015074683985273753 and parameters: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.00048287152161792117, 'weight_decay': 0.0012130221181165164, 'batch_size': 64}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 8/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 64, 'lr': 0.0018477934173519257, 'weight_decay': 8.22607494622104e-06, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 8/20: early-stopped after 18 epochs in 148.1s (8.23s/epoch) | best val loss 0.007288 @ epoch 10                                        
+  validation loss=0.007288
+[I 2026-08-25 19:29:45,701] Trial 7 finished with value: 0.007287821115044478 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 64, 'lr': 0.0018477934173519257, 'weight_decay': 8.22607494622104e-06, 'batch_size': 64}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 9/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.004878360603452143, 'weight_decay': 1.8707420137660263e-05, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 9/20: pruned after 11 epochs in 35.9s (3.27s/epoch) | best val loss 0.032485 @ epoch 7                                                 
+[I 2026-08-25 19:30:21,643] Trial 8 pruned. 
+
+Trial 10/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 256, 'lr': 9.324140221663475e-05, 'weight_decay': 0.00011889469769530483, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 10/20: pruned after 11 epochs in 75.5s (6.87s/epoch) | best val loss 0.038812 @ epoch 11                                               
+[I 2026-08-25 19:31:37,194] Trial 9 pruned. 
+
+Trial 11/20: {'d_model': 64, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.00842556592365944, 'weight_decay': 0.004272274816226793, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 11/20: pruned after 11 epochs in 198.3s (18.03s/epoch) | best val loss 0.120559 @ epoch 7                                              
+[I 2026-08-25 19:34:55,594] Trial 10 pruned. 
+
+Trial 12/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.002124002941541091, 'weight_decay': 0.0002097091060651053, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 12/20: early-stopped after 23 epochs in 227.4s (9.89s/epoch) | best val loss 0.007198 @ epoch 15                                       
+  validation loss=0.007198
+[I 2026-08-25 19:38:43,071] Trial 11 finished with value: 0.007197827663081365 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.002124002941541091, 'weight_decay': 0.0002097091060651053, 'batch_size': 64}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 13/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.001961213034577265, 'weight_decay': 0.00026683320148617357, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 13/20: early-stopped after 12 epochs in 114.0s (9.50s/epoch) | best val loss 0.010564 @ epoch 4                                        
+  validation loss=0.010564
+[I 2026-08-25 19:40:37,078] Trial 12 finished with value: 0.010564262399254534 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.001961213034577265, 'weight_decay': 0.00026683320148617357, 'batch_size': 64}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 14/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0005719381165809192, 'weight_decay': 0.009389590761560861, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 14/20: early-stopped after 15 epochs in 146.8s (9.79s/epoch) | best val loss 0.009188 @ epoch 7                                        
+  validation loss=0.009188
+[I 2026-08-25 19:43:03,897] Trial 13 finished with value: 0.009187539939635567 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0005719381165809192, 'weight_decay': 0.009389590761560861, 'batch_size': 64}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 15/20: {'d_model': 64, 'n_heads': 4, 'num_layers': 3, 'dim_ff': 256, 'lr': 0.0038740393333223243, 'weight_decay': 3.2390572426936675e-05, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 15/20: pruned after 11 epochs in 309.4s (28.13s/epoch) | best val loss 0.111315 @ epoch 4                                              
+[I 2026-08-25 19:48:13,343] Trial 14 pruned. 
+
+Trial 16/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0009459008646702514, 'weight_decay': 0.0009674366873384805, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 16/20: early-stopped after 26 epochs in 237.5s (9.14s/epoch) | best val loss 0.006021 @ epoch 18                                       
+  validation loss=0.006021
+[I 2026-08-25 19:52:10,930] Trial 15 finished with value: 0.006021117616910487 and parameters: {'d_model': 32, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0009459008646702514, 'weight_decay': 0.0009674366873384805, 'batch_size': 128}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 17/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0001813595261251925, 'weight_decay': 0.001064354691617635, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 17/20: pruned after 11 epochs in 99.3s (9.03s/epoch) | best val loss 0.041944 @ epoch 9                                                
+[I 2026-08-25 19:53:50,303] Trial 16 pruned. 
+
+Trial 18/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 256, 'lr': 0.0008454465736728867, 'weight_decay': 0.008873900066348375, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 18/20: early-stopped after 16 epochs in 316.4s (19.77s/epoch) | best val loss 0.017105 @ epoch 8                                       
+  validation loss=0.017105
+[I 2026-08-25 19:59:06,751] Trial 17 finished with value: 0.017105073493439704 and parameters: {'d_model': 32, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 256, 'lr': 0.0008454465736728867, 'weight_decay': 0.008873900066348375, 'batch_size': 128}. Best is trial 3 with value: 0.0033650978875812143.
+
+Trial 19/20: {'d_model': 32, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.000240410762710785, 'weight_decay': 0.0016632498627354702, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 19/20: pruned after 11 epochs in 153.4s (13.95s/epoch) | best val loss 0.039008 @ epoch 8                                              
+[I 2026-08-25 20:01:40,408] Trial 18 pruned. 
+
+Trial 20/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 256, 'lr': 0.005509264863860508, 'weight_decay': 0.00040182349832289694, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 20/20: pruned after 24 epochs in 396.8s (16.53s/epoch) | best val loss 0.017409 @ epoch 16                                             
+[I 2026-08-25 20:08:17,310] Trial 19 pruned. 
+
+Selected lambda*: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.002115429079726122, 'weight_decay': 0.005727904470799624, 'batch_size': 128, 'model_type': 'transformer', 'qkv_proj_blocksize': 4}
+HPO single-split validation loss: 0.003365
+Fold 1/5: early-stopped after 42 epochs in 585.5s (13.94s/epoch) | best val loss 0.019189 @ epoch 17                                         
+  fold 1/5: validation loss=0.019189
+Fold 2/5: early-stopped after 35 epochs in 476.2s (13.61s/epoch) | best val loss 0.097654 @ epoch 10                                         
+  fold 2/5: validation loss=0.097654
+Fold 3/5: early-stopped after 64 epochs in 793.2s (12.39s/epoch) | best val loss 0.000126 @ epoch 39                                         
+  fold 3/5: validation loss=0.000126
+Fold 4/5: early-stopped after 35 epochs in 430.7s (12.30s/epoch) | best val loss 0.045773 @ epoch 10                                         
+  fold 4/5: validation loss=0.045773
+Fold 5/5: early-stopped after 30 epochs in 372.0s (12.40s/epoch) | best val loss 0.098393 @ epoch 5                                          
+  fold 5/5: validation loss=0.098393
+
+Fold validation losses: ['0.019189', '0.097654', '0.000126', '0.045773', '0.098393']
+Best fold: 3/5 (val loss=0.000126), mean=0.052227 +/- 0.044840
+Best fold model has 118018 trainable parameters.
+
+Validation-selected decision threshold (F2-optimal, recall-prioritized): 0.9894 (F2=1.0000, precision=1.0000, recall=1.0000)
+
+Test accuracy: 0.9890
+Test Macro-averaged precision: 0.9901
+Test Macro-averaged recall: 0.9874
+Test Macro-averaged F1_score: 0.9887
+Test balanced accuracy: 0.9874
+
+Classification reports:
+              precision    recall  f1-score   support
+
+           0       0.98      1.00      0.99      1751
+           1       1.00      0.98      0.99      1249
+
+    accuracy                           0.99      3000
+   macro avg       0.99      0.99      0.99      3000
+weighted avg       0.99      0.99      0.99      3000
+
+Confusion matrix:
+[[1746    5]
+ [  28 1221]]
+
+Macro-average AUROC: 0.9981
+Macro-average AUPRC: 0.9974
+
+Validation macro AUROC: 1.0000
+Validation macro AUPRC: 1.0000
+Device: cpu
+Model type: transformer
+Development pool shape: (832, 140) (used for HPO + 5-fold CV)
+Held-out test shape: (1249, 140)
+[I 2026-08-25 20:54:21,038] A new study created in memory with name: no-name-58ea457a-5d65-41b4-b45d-f64d0894baba
+
+Trial 1/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.001331121608073689, 'weight_decay': 1.2087541473056965e-06, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 1/20: early-stopped after 15 epochs in 68.2s (4.55s/epoch) | best val loss 0.625699 @ epoch 7                                          
+  validation loss=0.625699
+[I 2026-08-25 20:55:29,234] Trial 0 finished with value: 0.6256991475820541 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.001331121608073689, 'weight_decay': 1.2087541473056965e-06, 'batch_size': 32}. Best is trial 0 with value: 0.6256991475820541.
+
+Trial 2/20: {'d_model': 128, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00012562773503807024, 'weight_decay': 6.672367170464208e-05, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 2/20: early-stopped after 9 epochs in 59.8s (6.65s/epoch) | best val loss 0.397644 @ epoch 1                                           
+  validation loss=0.397644
+[I 2026-08-25 20:56:29,100] Trial 1 finished with value: 0.3976435288786888 and parameters: {'d_model': 128, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00012562773503807024, 'weight_decay': 6.672367170464208e-05, 'batch_size': 32}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 3/20: {'d_model': 128, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 64, 'lr': 1.9634341572933304e-05, 'weight_decay': 0.0005456725485601478, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 3/20: early-stopped after 17 epochs in 701.5s (41.26s/epoch) | best val loss 0.448214 @ epoch 9                                        
+  validation loss=0.448214
+[I 2026-08-25 21:08:10,689] Trial 2 finished with value: 0.44821377098560333 and parameters: {'d_model': 128, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 64, 'lr': 1.9634341572933304e-05, 'weight_decay': 0.0005456725485601478, 'batch_size': 128}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 4/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.002115429079726122, 'weight_decay': 0.005727904470799624, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 4/20: early-stopped after 12 epochs in 427.3s (35.61s/epoch) | best val loss 0.469338 @ epoch 4                                        
+  validation loss=0.469338
+[I 2026-08-25 21:15:18,378] Trial 3 finished with value: 0.46933799982070923 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.002115429079726122, 'weight_decay': 0.005727904470799624, 'batch_size': 128}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 5/20: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00042470585622618684, 'weight_decay': 3.6618192203924288e-06, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 5/20: early-stopped after 23 epochs in 450.1s (19.57s/epoch) | best val loss 0.419459 @ epoch 15                                       
+  validation loss=0.419459
+[I 2026-08-25 21:22:48,715] Trial 4 finished with value: 0.41945864260196686 and parameters: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00042470585622618684, 'weight_decay': 3.6618192203924288e-06, 'batch_size': 128}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 6/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 3, 'dim_ff': 64, 'lr': 2.2264204303769678e-05, 'weight_decay': 0.0028340904295147754, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 6/20: pruned after 13 epochs in 212.5s (16.35s/epoch) | best val loss 0.525787 @ epoch 13                                              
+[I 2026-08-25 21:26:21,357] Trial 5 pruned. 
+
+Trial 7/20: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.00048287152161792117, 'weight_decay': 0.0012130221181165164, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 7/20: early-stopped after 10 epochs in 495.7s (49.57s/epoch) | best val loss 0.457028 @ epoch 2                                        
+  validation loss=0.457028
+[I 2026-08-25 21:34:37,205] Trial 6 finished with value: 0.45702799161275226 and parameters: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 256, 'lr': 0.00048287152161792117, 'weight_decay': 0.0012130221181165164, 'batch_size': 64}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 8/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 64, 'lr': 0.0018477934173519257, 'weight_decay': 8.22607494622104e-06, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 8/20: early-stopped after 9 epochs in 201.2s (22.36s/epoch) | best val loss 0.475767 @ epoch 1                                         
+  validation loss=0.475767
+[I 2026-08-25 21:37:58,520] Trial 7 finished with value: 0.4757668673992157 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 64, 'lr': 0.0018477934173519257, 'weight_decay': 8.22607494622104e-06, 'batch_size': 64}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 9/20: {'d_model': 32, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.004878360603452143, 'weight_decay': 1.8707420137660263e-05, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 9/20: early-stopped after 10 epochs in 89.1s (8.91s/epoch) | best val loss 0.548074 @ epoch 2                                          
+  validation loss=0.548074
+[I 2026-08-25 21:39:27,677] Trial 8 finished with value: 0.5480741262435913 and parameters: {'d_model': 32, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.004878360603452143, 'weight_decay': 1.8707420137660263e-05, 'batch_size': 128}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 10/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 256, 'lr': 9.324140221663475e-05, 'weight_decay': 0.00011889469769530483, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 10/20: early-stopped after 24 epochs in 326.4s (13.60s/epoch) | best val loss 0.430562 @ epoch 16                                      
+  validation loss=0.430562
+[I 2026-08-25 21:44:54,128] Trial 9 finished with value: 0.43056151270866394 and parameters: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 256, 'lr': 9.324140221663475e-05, 'weight_decay': 0.00011889469769530483, 'batch_size': 128}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 11/20: {'d_model': 128, 'n_heads': 4, 'num_layers': 3, 'dim_ff': 128, 'lr': 9.882175067155608e-05, 'weight_decay': 8.806161840044136e-05, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 11/20:   8%|███▊                                               | 3/40 [02:58<37:17, 60.48s/ep, bTrial 11/20:   8%|▊          | 3/40 [04:11<37:17, 60.48s/ep, best=0.4441@4, train=0.2190, val=0.4441] Trial 11/20: early-stopped after 14 epochs in 677.0s (48.35s/epoch) | best val loss 0.421055 @ epoch 6
+  validation loss=0.421055
+[I 2026-08-25 21:56:11,204] Trial 10 finished with value: 0.4210548860331376 and parameters: {'d_model': 128, 'n_heads': 4, 'num_layers': 3, 'dim_ff': 128, 'lr': 9.882175067155608e-05, 'weight_decay': 8.806161840044136e-05, 'batch_size': 32}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 12/20: {'d_model': 128, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00026481253423507183, 'weight_decay': 1.858661299439534e-06, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 12/20: early-stopped after 9 epochs in 142.5s (15.83s/epoch) | best val loss 0.473506 @ epoch 1
+  validation loss=0.473506
+[I 2026-08-25 21:58:33,796] Trial 11 finished with value: 0.47350593904654187 and parameters: {'d_model': 128, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00026481253423507183, 'weight_decay': 1.858661299439534e-06, 'batch_size': 32}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 13/20: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00016652364848910719, 'weight_decay': 1.663954676882937e-05, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 13/20: early-stopped after 12 epochs in 181.1s (15.09s/epoch) | best val loss 0.413241 @ epoch 4
+  validation loss=0.413241
+[I 2026-08-25 22:01:34,946] Trial 12 finished with value: 0.4132411479949951 and parameters: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 0.00016652364848910719, 'weight_decay': 1.663954676882937e-05, 'batch_size': 128}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 14/20: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 64, 'lr': 9.610666451366881e-05, 'weight_decay': 3.242714866308269e-05, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 14/20: early-stopped after 9 epochs in 339.4s (37.71s/epoch) | best val loss 0.417910 @ epoch 1
+  validation loss=0.417910
+[I 2026-08-25 22:07:14,440] Trial 13 finished with value: 0.41791022568941116 and parameters: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 64, 'lr': 9.610666451366881e-05, 'weight_decay': 3.242714866308269e-05, 'batch_size': 32}. Best is trial 1 with value: 0.3976435288786888.
+
+Trial 15/20: {'d_model': 32, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 64, 'lr': 4.720845304099489e-05, 'weight_decay': 0.00020948114885595512, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 15/20: pruned after 12 epochs in 124.9s (10.41s/epoch) | best val loss 0.526189 @ epoch 8      
+[I 2026-08-25 22:09:19,421] Trial 14 pruned. 
+
+Trial 16/20: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.0002117186385022968, 'weight_decay': 2.947919017939941e-05, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 16/20: early-stopped after 21 epochs in 338.2s (16.11s/epoch) | best val loss 0.397449 @ epoch 13
+  validation loss=0.397449
+[I 2026-08-25 22:14:57,708] Trial 15 finished with value: 0.39744938164949417 and parameters: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.0002117186385022968, 'weight_decay': 2.947919017939941e-05, 'batch_size': 128}. Best is trial 15 with value: 0.39744938164949417.
+
+Trial 17/20: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0006934797838904252, 'weight_decay': 5.2548275577189695e-05, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 17/20: early-stopped after 9 epochs in 367.6s (40.84s/epoch) | best val loss 0.576826 @ epoch 1
+  validation loss=0.576826
+[I 2026-08-25 22:21:05,357] Trial 16 finished with value: 0.5768257876237234 and parameters: {'d_model': 128, 'n_heads': 4, 'num_layers': 2, 'dim_ff': 128, 'lr': 0.0006934797838904252, 'weight_decay': 5.2548275577189695e-05, 'batch_size': 32}. Best is trial 15 with value: 0.39744938164949417.
+
+Trial 18/20: {'d_model': 64, 'n_heads': 2, 'num_layers': 1, 'dim_ff': 128, 'lr': 3.67166692919686e-05, 'weight_decay': 0.00040888647488391655, 'batch_size': 32, 'model_type': 'transformer'}
+Trial 18/20: pruned after 13 epochs in 108.1s (8.32s/epoch) | best val loss 0.478479 @ epoch 8       
+[I 2026-08-25 22:22:53,515] Trial 17 pruned. 
+
+Trial 19/20: {'d_model': 128, 'n_heads': 2, 'num_layers': 2, 'dim_ff': 128, 'lr': 1.0288606978769603e-05, 'weight_decay': 6.496803210755688e-06, 'batch_size': 128, 'model_type': 'transformer'}
+Trial 19/20: pruned after 12 epochs in 427.5s (35.62s/epoch) | best val loss 0.536339 @ epoch 12     
+[I 2026-08-25 22:30:01,082] Trial 18 pruned. 
+
+Trial 20/20: {'d_model': 32, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.00022322443770776077, 'weight_decay': 3.316888751685796e-05, 'batch_size': 64, 'model_type': 'transformer'}
+Trial 20/20: early-stopped after 12 epochs in 143.2s (11.93s/epoch) | best val loss 0.473133 @ epoch 4
+  validation loss=0.473133
+[I 2026-08-25 22:32:24,367] Trial 19 finished with value: 0.4731327295303345 and parameters: {'d_model': 32, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.00022322443770776077, 'weight_decay': 3.316888751685796e-05, 'batch_size': 64}. Best is trial 15 with value: 0.39744938164949417.
+
+Selected lambda*: {'d_model': 64, 'n_heads': 4, 'num_layers': 1, 'dim_ff': 128, 'lr': 0.0002117186385022968, 'weight_decay': 2.947919017939941e-05, 'batch_size': 128, 'model_type': 'transformer', 'qkv_proj_blocksize': 4}
+HPO single-split validation loss: 0.397449
+Fold 1/5: early-stopped after 33 epochs in 558.1s (16.91s/epoch) | best val loss 0.459940 @ epoch 8  
+  fold 1/5: validation loss=0.459940
+Fold 2/5: early-stopped after 45 epochs in 773.5s (17.19s/epoch) | best val loss 0.428157 @ epoch 20 
+  fold 2/5: validation loss=0.428157
+Fold 3/5: early-stopped after 35 epochs in 469.7s (13.42s/epoch) | best val loss 0.405281 @ epoch 10 
+  fold 3/5: validation loss=0.405281
+Fold 4/5: early-stopped after 36 epochs in 306.5s (8.51s/epoch) | best val loss 0.456587 @ epoch 11  
+  fold 4/5: validation loss=0.456587
+Fold 5/5: early-stopped after 42 epochs in 354.9s (8.45s/epoch) | best val loss 0.409210 @ epoch 17  
+  fold 5/5: validation loss=0.409210
+
+Fold validation losses: ['0.459940', '0.428157', '0.405281', '0.456587', '0.409210']
+Best fold: 3/5 (val loss=0.405281), mean=0.431835 +/- 0.025657
+Best fold model has 69444 trainable parameters.
+
+Validation-selected per-class decision thresholds (F1-optimal, balanced):
+  class 1: threshold=0.2058, F1=0.9617, precision=0.9452, recall=0.9787
+  class 2: threshold=0.7540, F1=0.6154, precision=0.6667, recall=0.5714
+  class 3: threshold=0.5836, F1=0.5517, precision=0.6154, recall=0.5000
+  class 4: threshold=0.4023, F1=0.3333, precision=0.2500, recall=0.5000
+
+Test accuracy: 0.8727
+Test Macro-averaged precision: 0.5618
+Test Macro-averaged recall: 0.5858
+Test Macro-averaged F1_score: 0.5670
+Test balanced accuracy: 0.5858
+
+Classification reports:
+              precision    recall  f1-score   support
+
+           0       0.94      0.94      0.94      1061
+           1       0.47      0.66      0.55        58
+           2       0.61      0.47      0.53       116
+           3       0.24      0.29      0.26        14
+
+    accuracy                           0.87      1249
+   macro avg       0.56      0.59      0.57      1249
+weighted avg       0.88      0.87      0.87      1249
+
+Confusion matrix:
+[[994  32  28   7]
+ [  9  38   5   6]
+ [ 58   4  54   0]
+ [  1   7   2   4]]
+
+Macro-average AUROC: 0.8558
+Macro-average AUPRC: 0.5154
+
+Validation macro AUROC: 0.8693
+Validation macro AUPRC: 0.5136

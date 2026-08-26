@@ -1,0 +1,68 @@
+{
+  "task": "binary",
+  "model": "MantisV2FrozenClassifier",
+  "pretrained_model": "paris-noah/MantisV2",
+  "representation": "final_cls_token",
+  "split_sizes": {
+    "train_original": 500,
+    "train_oversampled": 584,
+    "validation": 2250,
+    "test": 2250
+  },
+  "best_epoch": 100,
+  "best_validation_loss": 0.08307318491730052,
+  "epochs_run": 100,
+  "test_accuracy": 0.976,
+  "test_macro_precision": 0.9785338226960636,
+  "test_macro_recall": 0.972383210396909,
+  "test_macro_f1": 0.9751505488149573,
+  "test_balanced_accuracy": 0.972383210396909,
+  "test_macro_auroc": 0.989708139822295,
+  "test_macro_auprc": 0.9907272869836538,
+  "mean_head_epoch_seconds": 0.06441681861877441,
+  "confusion_matrix": [
+    [
+      1306,
+      8
+    ],
+    [
+      46,
+      890
+    ]
+  ],
+  "classification_report": {
+    "Normal": {
+      "precision": 0.9659763313609467,
+      "recall": 0.9939117199391172,
+      "f1-score": 0.9797449362340586,
+      "support": 1314.0
+    },
+    "Abnormal": {
+      "precision": 0.9910913140311804,
+      "recall": 0.9508547008547008,
+      "f1-score": 0.9705561613958561,
+      "support": 936.0
+    },
+    "accuracy": 0.976,
+    "macro avg": {
+      "precision": 0.9785338226960636,
+      "recall": 0.972383210396909,
+      "f1-score": 0.9751505488149573,
+      "support": 2250.0
+    },
+    "weighted avg": {
+      "precision": 0.9764241641517639,
+      "recall": 0.976,
+      "f1-score": 0.9759224059013664,
+      "support": 2250.0
+    }
+  },
+  "scaler": {
+    "mean": [
+      7.35492280158821e-11
+    ],
+    "scale": [
+      0.9964221709359703
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from ecg5000_time_series_modelling.archive.encoder_no_HPO.helpers import *
+from helpers import *
 from sklearn.preprocessing import StandardScaler
 
 

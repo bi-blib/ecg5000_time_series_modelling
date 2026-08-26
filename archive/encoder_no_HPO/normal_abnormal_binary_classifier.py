@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
 
-from ecg5000_time_series_modelling.archive.encoder_no_HPO.helpers import *
+from helpers import *
 
 def main():
     ### Load the data

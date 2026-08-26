@@ -3,7 +3,7 @@
 try:
     from .helpers_optuna import runCrossValidatedModelSelection
 except ImportError:
-    from ecg5000_time_series_modelling.archive.encoder.helpers_optuna import runCrossValidatedModelSelection
+    from helpers_optuna import runCrossValidatedModelSelection
 
 
 def main():

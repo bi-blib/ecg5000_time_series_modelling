@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from ecg5000_time_series_modelling.archive.xLSTM.helpers import *
+from helpers import *
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import RandomOverSampler
 
@@ -43,6 +43,13 @@ def main():
     # validation and test sets retain their natural class distributions.
     ros = RandomOverSampler(random_state=42)
     X_train_ros, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+
+    print(
+        "Training class counts before/after oversampling:",
+        np.bincount(y_train),
+        "->",
+        np.bincount(y_train_ros),
+    )
 
     ### Create the dataset
     train_loader, val_loader, test_loader = getLoaders(

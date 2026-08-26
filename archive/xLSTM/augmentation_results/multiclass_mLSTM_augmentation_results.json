@@ -1,0 +1,50 @@
+[
+  {
+    "scenario": "oversampling_only",
+    "task": "multiclass",
+    "seed": 42,
+    "model_type": "mLSTM",
+    "original_training_samples": 208,
+    "post_augmentation_samples": 208,
+    "post_oversampling_samples": 708,
+    "epochs_run": 21,
+    "best_epoch": 11,
+    "best_validation_loss": 0.45026317487160367,
+    "test_accuracy": 0.8354700854700855,
+    "test_balanced_accuracy": 0.47185726016883056,
+    "test_macro_f1": 0.4765448914869381,
+    "mean_epoch_seconds": 6.400902305330549
+  },
+  {
+    "scenario": "full_reversal",
+    "task": "multiclass",
+    "seed": 42,
+    "model_type": "mLSTM",
+    "original_training_samples": 208,
+    "post_augmentation_samples": 416,
+    "post_oversampling_samples": 1416,
+    "epochs_run": 23,
+    "best_epoch": 13,
+    "best_validation_loss": 0.4918013125658035,
+    "test_accuracy": 0.8322649572649573,
+    "test_balanced_accuracy": 0.46285527805326265,
+    "test_macro_f1": 0.46103008525329386,
+    "mean_epoch_seconds": 10.675779342651367
+  },
+  {
+    "scenario": "ecg_perturbation_50pct",
+    "task": "multiclass",
+    "seed": 42,
+    "model_type": "mLSTM",
+    "original_training_samples": 208,
+    "post_augmentation_samples": 312,
+    "post_oversampling_samples": 1060,
+    "epochs_run": 15,
+    "best_epoch": 5,
+    "best_validation_loss": 0.45445162802934647,
+    "test_accuracy": 0.8482905982905983,
+    "test_balanced_accuracy": 0.4891889190432109,
+    "test_macro_f1": 0.49285608227659317,
+    "mean_epoch_seconds": 8.302389526367188
+  }
+]

@@ -334,6 +334,20 @@ def getCriterion(y_train, device):
     print(class_weights)
     return nn.CrossEntropyLoss(weight=class_weights_tensor)
 
+
+def augmentWithTimeReversal(X_train, y_train):
+    """Append one time-reversed copy of every training observation."""
+    if X_train.ndim != 2:
+        raise ValueError("X_train must have shape (samples, timesteps)")
+    if len(X_train) != len(y_train):
+        raise ValueError("X_train and y_train must contain the same sample count")
+
+    X_reversed = X_train[:, ::-1].copy()
+    return (
+        np.concatenate([X_train, X_reversed], axis=0),
+        np.concatenate([y_train, y_train], axis=0),
+    )
+
 def getLoaders(X_train_scaled, X_val_scaled, X_test_scaled,
                y_train, y_val, y_test):
     
@@ -530,8 +544,10 @@ def cleanAndSplitRaw(train, test):
     y_train = train[:, 0]
     X_temp = test[:, 1:]
     y_temp = test[:, 0]
-    y_train = y_train - 1
-    y_temp = y_temp - 1
+    # np.loadtxt returns floating-point arrays, but class labels are discrete.
+    # Keep them integer-valued for bincount, resampling, and CrossEntropyLoss.
+    y_train = (y_train - 1).astype(np.int64)
+    y_temp = (y_temp - 1).astype(np.int64)
 
     X_val, X_test, y_val, y_test = train_test_split( 
         X_temp, y_temp, test_size=0.50, stratify=y_temp, random_state=42

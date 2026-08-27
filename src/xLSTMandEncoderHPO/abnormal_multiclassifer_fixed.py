@@ -14,11 +14,11 @@ FIXED_PARAMS = {
     "transformer": {
         "model_type": "transformer",
         "d_model": 64,
-        "n_heads": 4,
+        "n_heads": 2,
         "num_layers": 1,
-        "dim_ff": 128,
-        "lr": 0.0002117186385022968,
-        "weight_decay": 2.947919017939941e-05,
+        "dim_ff": 256,
+        "lr": 9.324140221663475e-05,
+        "weight_decay": 0.00011889469769530483,
         "batch_size": 128,
     },
     "xlstm": {

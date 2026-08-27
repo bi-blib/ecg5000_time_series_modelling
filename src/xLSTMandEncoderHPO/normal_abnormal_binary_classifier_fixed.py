@@ -11,13 +11,13 @@ from model_selection import runFixedParamsModelSelection
 FIXED_PARAMS = {
     "transformer": {
         "model_type": "transformer",
-        "d_model": 64,
-        "n_heads": 2,
+        "d_model": 128,
+        "n_heads": 4,
         "num_layers": 2,
-        "dim_ff": 256,
-        "lr": 0.002115429079726122,
-        "weight_decay": 0.005727904470799624,
-        "batch_size": 128,
+        "dim_ff": 64,
+        "lr": 9.280687537564391e-05,
+        "weight_decay": 0.00032295598684863307,
+        "batch_size": 32,
     },
     "xlstm": {
         "model_type": "xlstm",

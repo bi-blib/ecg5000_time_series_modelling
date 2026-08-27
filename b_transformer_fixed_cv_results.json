@@ -3,35 +3,63 @@
   "model_type": "transformer",
   "lambda_star": {
     "model_type": "transformer",
-    "d_model": 64,
+    "d_model": 128,
     "n_heads": 4,
     "num_layers": 2,
-    "dim_ff": 128,
-    "lr": 0.0003,
-    "weight_decay": 0.0001,
-    "batch_size": 64
+    "dim_ff": 64,
+    "lr": 9.280687537564391e-05,
+    "weight_decay": 0.00032295598684863307,
+    "batch_size": 32
   },
   "cv_fold_val_losses": [
-    0.015438029613246076,
-    0.06618293258361518,
-    0.0017249446162687881,
-    0.026321217750332186,
-    0.05587303372366088
+    0.03435057364941503,
+    0.013125608263250727,
+    0.02831378079449328,
+    0.07738733829822965,
+    0.026431901255049385
   ],
-  "cv_fold_val_loss_mean": 0.03310803165742462,
-  "cv_fold_val_loss_std": 0.027181714247985735,
-  "best_fold": 3,
-  "checkpoint_path": "b_transformer_fixed_fold3_model.pth",
+  "cv_fold_val_loss_mean": 0.035921840452087614,
+  "cv_fold_val_loss_std": 0.024441082784514432,
+  "best_fold": 2,
+  "checkpoint_path": "b_transformer_fixed_fold2_model.pth",
   "decision_threshold": {
     "beta": 2.0,
-    "threshold": 0.7790699005126953
+    "threshold": 0.44299280643463135
   },
   "test_performance_indicator": "balanced_accuracy",
-  "test_balanced_accuracy": 0.9893648785390392,
+  "test_balanced_accuracy": 0.9917676501580611,
+  "trainable_parameters": 202370,
+  "time_per_epoch": [
+    6.950076200067997,
+    7.8518251000205055,
+    8.161595899960957,
+    12.416367599973455,
+    7.810087600024417,
+    7.639244200079702,
+    11.828692900016904,
+    9.504259299952537,
+    7.444144300068729,
+    7.2577055000001565,
+    7.244676799979061,
+    10.175869300030172,
+    12.80049739999231,
+    10.89435760001652,
+    11.639707900001667,
+    12.09915100003127,
+    11.169077900005504,
+    12.657791100093164,
+    10.897229800000787,
+    11.313878300017677,
+    13.108237200067379
+  ],
+  "average_time_per_epoch": 10.041165376209566,
   "split_sizes": {
     "development": 2000,
     "best_fold_train": 1600,
     "best_fold_validation": 400,
     "test": 3000
-  }
+  },
+  "test_macro_f1": 0.9917676501580611,
+  "test_macro_auroc": 0.9992600032197635,
+  "test_macro_auprc": 0.9991402303100348
 }

@@ -59,11 +59,15 @@ def main():
         n_tokens=n_tokens,
     ).to(device)
 
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Best fold model has {num_params} trainable parameters.")
+
+
     # Loss function
-    criterion = getCriterion(y_train=y_train, device=device)
+    criterion = torch.nn.CrossEntropyLoss()
 
     ### Training loop
-    train_losses, val_losses = performTrainingLoop(model, train_loader, val_loader, device, criterion)
+    train_losses, val_losses, time_per_epoch = performTrainingLoop(model, train_loader, val_loader, device, criterion)
     plotLossCurve(train_losses, val_losses, save_path="b_loss.png")
 
     best_model = BaseTransformerClassifier(
@@ -88,7 +92,7 @@ def main():
 
     ### Metrics
     class_labels = np.unique(y_train)
-    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="b", roc_suffix="auc")
+    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="b", roc_suffix="auc", time_per_epoch=time_per_epoch)
 
 if __name__ == "__main__":
     main()

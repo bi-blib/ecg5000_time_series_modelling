@@ -53,7 +53,7 @@ SEED = 42
 TARGET_LENGTH = 512
 BATCH_SIZE = 32
 EMBEDDING_BATCH_SIZE = 64
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 0.0001
 EPOCHS = 300
 EARLY_STOP_PATIENCE = 10
 
@@ -421,6 +421,10 @@ def run_task(task, extractor, device, args):
     )
 
     head = nn.Linear(train_embeddings.shape[1], len(class_names)).to(device)
+    trainable_parameters = sum(
+        parameter.numel() for parameter in head.parameters() if parameter.requires_grad
+    )
+    print(f"Trainable head parameters: {trainable_parameters}", flush=True)
     checkpoint_path = output_dir / f"{prefix}_best_model.pth"
     train_losses, val_losses, epoch_times = train_head(
         head,
@@ -464,6 +468,9 @@ def run_task(task, extractor, device, args):
         "best_epoch": int(np.argmin(val_losses) + 1),
         "best_validation_loss": float(np.min(val_losses)),
         "epochs_run": len(val_losses),
+        "trainable_parameters": int(trainable_parameters),
+        "time_per_epoch": [float(value) for value in epoch_times],
+        "average_time_per_epoch": float(np.mean(epoch_times)),
         "test_accuracy": float(accuracy),
         "test_macro_precision": float(precision),
         "test_macro_recall": float(recall),

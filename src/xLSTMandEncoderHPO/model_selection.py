@@ -26,10 +26,10 @@ from config import (
     RANDOM_STATE,
     TEST_FRACTION,
 )
-from data import _loader, binaryOversampleStrategy, loadTaskData, makeFolds, relabelForTask, setSeed
+from data import _loader, loadTaskData, makeFolds, multiclassOversampleStrategy, relabelForTask, setSeed
 from evaluation import applyMulticlassThresholds, chooseMulticlassThresholds, chooseThresholdMaxFbeta, evaluateAndReport
 from hpo_search import resolveBestParams, suggestHyperparams
-from models import buildModel
+from models import buildModel, countTrainableParameters
 from training import performInferenceLoop, performTrainingLoopOptuna
 
 
@@ -55,11 +55,14 @@ def scoreHyperparams(params, X_train, y_train, X_val, y_val, device, trial, task
     # Duplicate minority rows in the training split only, on the raw subtype
     # label; the validation split keeps its natural distribution so the
     # score still reflects real-world performance.
-    ros = RandomOverSampler(
-        sampling_strategy=binaryOversampleStrategy(y_train) if task == "binary" else "auto",
-        random_state=RANDOM_STATE,
-    )
-    X_train_scaled, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+    if task == "multiclass":
+        ros = RandomOverSampler(
+            sampling_strategy=multiclassOversampleStrategy(y_train),
+            random_state=RANDOM_STATE,
+        )
+        X_train_scaled, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+    else:
+        y_train_ros = y_train
 
     y_train_ros = relabelForTask(task, y_train_ros)
     y_val = relabelForTask(task, y_val)
@@ -74,11 +77,14 @@ def scoreHyperparams(params, X_train, y_train, X_val, y_val, device, trial, task
     train_loader = _loader(X_train_scaled, y_train_ros, params["batch_size"], True)
     val_loader = _loader(X_val_scaled, y_val, params["batch_size"], False)
     model = buildModel(params, 1, n_classes, n_tokens, device)
+    print(
+        f"Optuna trial trainable parameters: {countTrainableParameters(model)}",
+        flush=True,
+    )
 
-    _, val_losses = performTrainingLoopOptuna(
+    _, val_losses, _ = performTrainingLoopOptuna(
         model, train_loader, val_loader, device,
-        # RandomOverSampler already balances the training distribution; also
-        # class-weighting the loss would over-correct.
+        # Oversampling and class-weighting together would over-correct the loss.
         nn.CrossEntropyLoss(),
         lr=params["lr"],
         weight_decay=params["weight_decay"],
@@ -118,11 +124,12 @@ def runFoldCV(params, X_development, y_development, folds, device, output_prefix
         # Duplicate minority rows in the training fold only, on the raw
         # subtype label; the validation fold keeps its natural distribution
         # so the fold score still reflects real-world performance.
-        ros = RandomOverSampler(
-            sampling_strategy=binaryOversampleStrategy(y_train) if task == "binary" else "auto",
-            random_state=RANDOM_STATE,
-        )
-        X_train, y_train = ros.fit_resample(X_train, y_train)
+        if task == "multiclass":
+            ros = RandomOverSampler(
+                sampling_strategy=multiclassOversampleStrategy(y_train),
+                random_state=RANDOM_STATE,
+            )
+            X_train, y_train = ros.fit_resample(X_train, y_train)
 
         y_train = relabelForTask(task, y_train)
         y_val = relabelForTask(task, y_val)
@@ -131,9 +138,15 @@ def runFoldCV(params, X_development, y_development, folds, device, output_prefix
         train_loader = _loader(X_train, y_train, params["batch_size"], True)
         val_loader = _loader(X_val, y_val, params["batch_size"], False)
         model = buildModel(params, 1, n_classes, n_tokens, device)
+        trainable_parameters = countTrainableParameters(model)
+        print(
+            f"Fold {fold_number}/{N_SPLITS} trainable parameters: "
+            f"{trainable_parameters}",
+            flush=True,
+        )
 
         checkpoint_path = f"{output_prefix}_fold{fold_number}_model.pth"
-        _, val_losses = performTrainingLoopOptuna(
+        _, val_losses, epoch_times = performTrainingLoopOptuna(
             model, train_loader, val_loader, device,
             nn.CrossEntropyLoss(),
             lr=params["lr"],
@@ -154,6 +167,8 @@ def runFoldCV(params, X_development, y_development, folds, device, output_prefix
             "checkpoint_path": checkpoint_path,
             "val_loader": val_loader,
             "scaler": scaler,
+            "time_per_epoch": epoch_times,
+            "trainable_parameters": trainable_parameters,
         })
 
     return fold_results
@@ -270,6 +285,9 @@ def buildSelectionReport(task, model_type, params, fold_val_losses, fold_std, be
         "decision_threshold": threshold_info,
         "test_performance_indicator": "balanced_accuracy",
         "test_balanced_accuracy": test_score,
+        "trainable_parameters": best["trainable_parameters"],
+        "time_per_epoch": best["time_per_epoch"],
+        "average_time_per_epoch": float(np.mean(best["time_per_epoch"])),
         "split_sizes": split_sizes,
     }
     if extra_report_fields:
@@ -326,11 +344,12 @@ def runFinalModelSelection(task, model_type, output_prefix, roc_suffix, params,
     y_pred = applyDecisionThreshold(y_test_score, decision_thresholds, class_labels)
 
     test_score = float(balanced_accuracy_score(y_true, y_pred))
-    evaluateAndReport(
+    test_metrics = evaluateAndReport(
         y_true, y_pred, test_logits, class_labels,
         prefix=output_prefix, roc_suffix=roc_suffix,
         decision_thresholds=decision_thresholds,
         val_true=y_val_true, val_logits=val_logits,
+        time_per_epoch=best["time_per_epoch"],
     )
 
     best_train_index, best_val_index = folds[best["fold"] - 1]
@@ -342,7 +361,13 @@ def runFinalModelSelection(task, model_type, output_prefix, roc_suffix, params,
     }
     report = buildSelectionReport(
         task, model_type, params, fold_val_losses, fold_std, best,
-        threshold_info, test_score, split_sizes, extra_report_fields=extra_report_fields,
+        threshold_info, test_score, split_sizes,
+        extra_report_fields={
+            **(extra_report_fields or {}),
+            "test_macro_f1": test_metrics["f1"],
+            "test_macro_auroc": test_metrics["macro_auroc"],
+            "test_macro_auprc": test_metrics["macro_auprc"],
+        },
     )
     writeSelectionReport(report, output_prefix)
     return report

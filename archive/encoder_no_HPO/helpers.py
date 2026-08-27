@@ -1,6 +1,9 @@
+import time
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
@@ -22,7 +25,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 #Statics
-BATCH_SIZE = 20
+BATCH_SIZE = 32
 D_MODEL = 64
 DIM_FF = 128
 N_HEADS = 4
@@ -30,6 +33,7 @@ NUM_LAYERS = 1
 LR = 0.0001
 EPOCHS = 300
 EARLY_STOP_NO_IMPROVEMENT = 10
+RANDOM_STATE = 42
 
 
 class ClassificationDataset(Dataset):
@@ -129,6 +133,30 @@ def getCriterion(y_train, device):
     print(class_weights)
     return nn.CrossEntropyLoss(weight=class_weights_tensor)
 
+
+def multiclassOversampleStrategy(y, amount=20):
+    class_counts = np.bincount(np.asarray(y, dtype=np.int64))
+    majority_count = int(class_counts.max())
+    majority_class = int(class_counts.argmax())
+    return {
+        class_id: (
+            count
+            if class_id == majority_class
+            else min(count + amount, majority_count)
+        )
+        for class_id, count in enumerate(class_counts)
+        if count > 0
+    }
+
+
+def oversampleTrainingData(X_train, y_train, task):
+    if task == "binary":
+        return X_train, y_train
+    return RandomOverSampler(
+        sampling_strategy=multiclassOversampleStrategy(y_train),
+        random_state=RANDOM_STATE,
+    ).fit_resample(X_train, y_train)
+
 def getLoaders(X_train_scaled, X_val_scaled, X_test_scaled,
                y_train, y_val, y_test):
     
@@ -185,8 +213,10 @@ def performTrainingLoop(
     val_losses = []
     best_val_loss = float("inf")
     best_val_epoch = 0
+    time_per_epoch = []
 
     for epoch in range(EPOCHS):
+        start_time = time.time() # Start time per epoch
         model.train()
 
         train_loss = 0.0
@@ -231,29 +261,33 @@ def performTrainingLoop(
             val_loss /= len(val_loader)
             val_losses.append(val_loss)
 
-            #save best validation loss use later; protects against overfitting
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_val_epoch = epoch
-                torch.save(model.state_dict(), "best_model.pth")
+        end_time = time.time() #timestamp
+        time_per_epoch.append(end_time - start_time) # Appends the time per epoch
 
 
-            print(
-                f"Epoch: {epoch + 1:3d} | "
-                f"Train loss: {train_loss:.8f}"
-                f" | "
-                f"Val loss: {val_loss:.8f}"
-                f" | "
-                f"Best Val loss: {best_val_loss:.8f}"
-                f" | "
-                f"Best Val epoch: {best_val_epoch + 1}"
-            )
+        #save best validation loss use later; protects against overfitting
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_val_epoch = epoch
+            torch.save(model.state_dict(), "best_model.pth")
+
+
+        print(
+            f"Epoch: {epoch + 1:3d} | "
+            f"Train loss: {train_loss:.8f}"
+            f" | "
+            f"Val loss: {val_loss:.8f}"
+            f" | "
+            f"Best Val loss: {best_val_loss:.8f}"
+            f" | "
+            f"Best Val epoch: {best_val_epoch + 1}"
+        )
 
         if epoch == best_val_epoch + EARLY_STOP_NO_IMPROVEMENT: #early stopping if we haven't had a best val epoch in EARLY_STOP_NO_IMPROVEMENT epochs
             print("No reduction in validation loss in 10 epochs. Stopping training early.")
             break
 
-    return train_losses, val_losses
+    return train_losses, val_losses, time_per_epoch
 
 def plotLossCurve(train_losses, val_losses, save_path=None):
     # Best epoch = lowest val loss; this is also the epoch performTrainingLoop
@@ -326,7 +360,10 @@ def cleanAndSplitRaw(train, test):
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
-def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc"):
+def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix="roc",time_per_epoch=None, decision_thresholds=None, val_true=None, val_logits=None):
+    if time_per_epoch is None:
+        time_per_epoch = []
+
     test_accuracy = accuracy_score(y_true, y_pred)
     print(f"\nTest accuracy: {test_accuracy:.4f}")
 
@@ -341,6 +378,11 @@ def performMetrics(y_true, y_pred, all_logits, class_labels, prefix, roc_suffix=
 
     test_balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
     print(f"Test balanced accuracy: {test_balanced_accuracy:.4f}")
+
+    if time_per_epoch:
+        average_time_per_epoch = sum(time_per_epoch) / len(time_per_epoch)
+        print(f"Average time per epoch: {average_time_per_epoch:.4f}s")
+
 
     print("\nClassification reports:")
     print(classification_report(y_true, y_pred))

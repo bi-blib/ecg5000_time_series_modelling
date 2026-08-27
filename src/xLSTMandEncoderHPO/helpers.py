@@ -41,16 +41,16 @@ from xlstm import (
 
 #Statics
 BATCH_SIZE = 32
-D_MODEL = 64
-DIM_FF = 128
+D_MODEL = 128
+DIM_FF = 64
 NUM_BLOCKS = 1 # set to 2 or more for xLSTM with mLSTM and sLSTM block
 NUM_HEADS = 4
 CONV1D_KERNEL_SIZE= 4 # the amount of timesteps we should use to get the representation that we want
 QVK_PROJ_BLOCKSIZE=4
-NUM_LAYERS = 1
-LR = 0.0001
+NUM_LAYERS = 2
+LR = 9.280687537564391e-05
 EPOCHS = 300
-EARLY_STOP_NO_IMPROVEMENT = 25
+EARLY_STOP_NO_IMPROVEMENT = 10
 
 # Optuna HPO settings. Trials run on a smaller epoch budget than the final
 # training run so a full search finishes in reasonable time on CPU; the

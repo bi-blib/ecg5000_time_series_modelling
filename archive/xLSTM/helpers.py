@@ -3,6 +3,7 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
@@ -43,6 +44,7 @@ NUM_LAYERS = 1
 LR = 0.0001
 EPOCHS = 300
 EARLY_STOP_NO_IMPROVEMENT = 10
+RANDOM_STATE=42
 
 
 class ClassificationDataset(Dataset):
@@ -371,6 +373,28 @@ def getLoaders(X_train_scaled, X_val_scaled, X_test_scaled,
     )
 
     return train_loader, val_loader, test_loader
+def _multiclass_sampling_strategy(y):
+    class_counts = np.bincount(np.asarray(y, dtype=np.int64))
+    majority_count = int(class_counts.max())
+    majority_class = int(class_counts.argmax())
+    return {
+        class_id: (
+            count
+            if class_id == majority_class
+            else min(count + 20, majority_count)
+        )
+        for class_id, count in enumerate(class_counts)
+        if count > 0
+    }
+
+
+def oversampleTrainingData(X_train, y_train, task):
+    if task == "binary":
+        return X_train, y_train
+    return RandomOverSampler(
+        sampling_strategy=_multiclass_sampling_strategy(y_train),
+        random_state=RANDOM_STATE,
+    ).fit_resample(X_train, y_train)
 
 def performTrainingLoop(
         model,

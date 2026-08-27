@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from helpers import *
 from sklearn.preprocessing import StandardScaler
-from imblearn.over_sampling import RandomOverSampler
 
 
 def main():
@@ -39,10 +38,9 @@ def main():
     X_val_scaled = scaler.transform(X_val).astype(np.float32)
     X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
-    # Duplicate minority-class observations in the training set only.  The
-    # validation and test sets retain their natural class distributions.
-    ros = RandomOverSampler(random_state=42)
-    X_train_ros, y_train_ros = ros.fit_resample(X_train_scaled, y_train)
+    X_train_ros, y_train_ros = oversampleTrainingData(
+        X_train_scaled, y_train, task="multiclass"
+    )
 
     ### Create the dataset
     train_loader, val_loader, test_loader = getLoaders(
@@ -82,9 +80,7 @@ def main():
     print(f"Model has {num_params} trainable parameters.")
 
     # Loss function
-    # RandomOverSampler already balances the training distribution.  Applying
-    # weights computed from the original labels as well would over-correct the
-    # rare classes, so use an unweighted loss.
+    # Oversampling and class weighting together would over-correct the loss.
     criterion = torch.nn.CrossEntropyLoss()
 
     ### Training loop

@@ -98,11 +98,11 @@ def computeScalarMetrics(y_true, y_pred):
     applicable.
     """
     return {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "precision": precision_score(y_true, y_pred, average="macro"),
-        "recall": recall_score(y_true, y_pred, average="macro"),
-        "f1": f1_score(y_true, y_pred, average="macro"),
-        "balanced_accuracy": balanced_accuracy_score(y_true, y_pred),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "precision": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+        "recall": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
+        "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
     }
 
 
@@ -146,6 +146,8 @@ def evaluateAndReport(y_true, y_pred, all_logits, class_labels, prefix, roc_suff
         y_true, y_score, class_labels, title="Test set",
         save_path=f"{prefix}_{roc_suffix}.png", annotate_threshold=False,
     )
+    metrics["macro_auroc"] = float(macro_auroc)
+    metrics["macro_auprc"] = float(macro_auprc)
     print(f"\nMacro-average AUROC: {macro_auroc:.4f}")
     print(f"Macro-average AUPRC: {macro_auprc:.4f}")
 
@@ -160,3 +162,5 @@ def evaluateAndReport(y_true, y_pred, all_logits, class_labels, prefix, roc_suff
         )
         print(f"\nValidation macro AUROC: {val_auroc:.4f}")
         print(f"Validation macro AUPRC: {val_auprc:.4f}")
+
+    return metrics

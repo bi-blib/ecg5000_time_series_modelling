@@ -55,6 +55,7 @@ def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion
 
     train_losses = []
     val_losses = []
+    epoch_times = []
     best_val_loss = float("inf")
     best_val_epoch = 0
 
@@ -81,6 +82,7 @@ def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion
 
     try:
         for epoch in bar:
+            epoch_started = time.perf_counter()
             epochs_run = epoch + 1
             model.train()
             train_loss = 0.0
@@ -112,6 +114,7 @@ def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion
 
             val_loss /= len(val_loader)
             val_losses.append(val_loss)
+            epoch_times.append(time.perf_counter() - epoch_started)
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -164,4 +167,4 @@ def performTrainingLoopOptuna(model, train_loader, val_loader, device, criterion
             flush=True,
         )
 
-    return train_losses, val_losses
+    return train_losses, val_losses, epoch_times

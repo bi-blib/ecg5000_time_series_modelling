@@ -20,7 +20,7 @@
   "test_balanced_accuracy": 0.4798091749529918,
   "test_macro_auroc": 0.8557907162208949,
   "test_macro_auprc": 0.5270458625868575,
-  "mean_head_epoch_seconds": 0.031060865369893737,
+  "mean_head_epoch_seconds": 0.03488959296274993,
   "confusion_matrix": [
     [
       755,

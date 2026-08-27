@@ -37,6 +37,10 @@ def main():
     X_val_scaled = scaler.transform(X_val).astype(np.float32)
     X_test_scaled = scaler.transform(X_test).astype(np.float32)
 
+    X_train_scaled, y_train = oversampleTrainingData(
+        X_train_scaled, y_train, task="multiclass"
+    )
+
     ### Create the dataset
     train_loader, val_loader, test_loader = getLoaders(
         X_train_scaled=X_train_scaled,
@@ -72,11 +76,14 @@ def main():
         n_tokens=n_tokens,
     ).to(device)
 
-    # Loss function
-    criterion = getCriterion(y_train=y_train, device=device)
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Best fold model has {num_params} trainable parameters.")
+
+    #Loss function
+    criterion = torch.nn.CrossEntropyLoss()
 
     ### Training loop
-    train_losses, val_losses = performTrainingLoop(model, train_loader, val_loader, device, criterion)
+    train_losses, val_losses, time_per_epoch = performTrainingLoop(model, train_loader, val_loader, device, criterion)
     plotLossCurve(train_losses, val_losses, save_path="mc_loss.png")
 
     best_model = BaseTransformerClassifier(
@@ -101,7 +108,7 @@ def main():
 
     ### Metrics
     class_labels = np.unique(y_train)
-    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="mc", roc_suffix="roc")
+    performMetrics(y_true, y_pred, all_logits, class_labels, prefix="mc", roc_suffix="roc", time_per_epoch=time_per_epoch)
 
 if __name__ == "__main__":
     main()

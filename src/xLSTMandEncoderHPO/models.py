@@ -211,3 +211,11 @@ def buildModel(params, input_size, n_classes, n_tokens, device):
         block_mix=params["block_mix"],
         pooling=params["pooling"],
     ).to(device)
+
+
+def countTrainableParameters(model):
+    return sum(
+        parameter.numel()
+        for parameter in model.parameters()
+        if parameter.requires_grad
+    )

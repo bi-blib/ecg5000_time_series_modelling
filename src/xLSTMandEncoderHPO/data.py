@@ -46,11 +46,11 @@ def loadTaskData(task):
     """Load complete ECG5000 data and labels for the selected task.
 
     For "binary", y is the raw 5-way subtype label (0=normal, 1-4=abnormal
-    subtypes) rather than the collapsed healthy/unhealthy label. Splitting,
-    stratification, and oversampling must all happen on this subtype label
-    so rare abnormal subtypes get fair representation in every split and in
-    the oversampled training set - call relabelForTask("binary", y) right
-    before the label reaches the model/loss/metrics.
+    subtypes) rather than the collapsed healthy/unhealthy label. Splitting
+    and stratification happen on this subtype label so rare abnormal
+    subtypes get fair representation in every split. Binary training is not
+    oversampled; call relabelForTask("binary", y) before the label reaches
+    the model/loss/metrics.
     """
     train, test = loadRawDataFromFile()
     complete = np.concatenate([train, test])
@@ -78,29 +78,27 @@ def toBinaryLabels(y):
 def relabelForTask(task, y):
     """No-op for multiclass; collapses to healthy/unhealthy for binary.
 
-    Apply only where a task-facing label is needed (model input, loss,
-    metrics) - never to the label array driving stratified splitting or the
-    RandomOverSampler oversample target, which must stay in the raw 5-way
-    subtype space for binary.
+    Apply only where a task-facing label is needed (model input, loss, or
+    metrics), never before stratified splitting. Multiclass oversampling uses
+    the multiclass labels; binary has no oversampling.
     """
     return toBinaryLabels(y) if task == "binary" else y
 
 
-def binaryOversampleStrategy(y):
-    """RandomOverSampler target for the binary task's raw subtype label.
-
-    Brings each abnormal subtype up toward healthy_count / num_abnormal_
-    subtypes, never down, so every rare subtype gets real representation
-    once merged into "unhealthy" - without fully equalizing all 5 raw
-    classes, which would leave "unhealthy" ~4x the size of "healthy" after
-    merging and require re-weighting the loss to compensate.
-    """
-    classes, counts = np.unique(y, return_counts=True)
-    counts_by_class = dict(zip(classes.tolist(), counts.tolist()))
-    healthy_count = counts_by_class.get(0, 0)
-    abnormal_classes = [c for c in counts_by_class if c != 0]
-    target = healthy_count // len(abnormal_classes)
-    return {c: max(counts_by_class[c], target) for c in abnormal_classes}
+def multiclassOversampleStrategy(y, amount=20):
+    """Add a fixed number of samples to each minority class, with a cap."""
+    class_counts = np.bincount(np.asarray(y, dtype=np.int64))
+    majority_count = int(class_counts.max())
+    majority_class = int(class_counts.argmax())
+    return {
+        class_id: (
+            count
+            if class_id == majority_class
+            else min(count + amount, majority_count)
+        )
+        for class_id, count in enumerate(class_counts)
+        if count > 0
+    }
 
 
 def _loader(X, y, batch_size, shuffle):

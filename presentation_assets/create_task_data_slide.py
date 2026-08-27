@@ -55,40 +55,41 @@ def card(draw, box, number, title, accent, body, footnote=None):
     draw.rounded_rectangle(box, radius=26, fill="white", outline=LINE, width=3)
     draw.rounded_rectangle((left, top, left + 13, bottom), radius=7, fill=accent)
 
-    draw.ellipse((left + 34, top + 31, left + 84, top + 81), fill=accent)
-    number_font = font(25, True)
+    draw.ellipse((left + 30, top + 27, left + 86, top + 83), fill=accent)
+    number_font = font(28, True)
     number_box = draw.textbbox((0, 0), str(number), font=number_font)
     draw.text(
-        (left + 59 - (number_box[2] - number_box[0]) / 2, top + 56 - (number_box[3] - number_box[1]) / 2 - number_box[1]),
+        (left + 58 - (number_box[2] - number_box[0]) / 2, top + 55 - (number_box[3] - number_box[1]) / 2 - number_box[1]),
         str(number),
         font=number_font,
         fill="white",
     )
-    draw.text((left + 103, top + 34), title.upper(), font=font(22, True), fill=accent)
-    body_end = draw_wrapped(draw, (left + 38, top + 108), body, font(23), TEXT, right - left - 76, 8)
+    draw.text((left + 102, top + 31), title.upper(), font=font(24, True), fill=accent)
+    body_end = draw_wrapped(draw, (left + 32, top + 103), body, font(26), TEXT, right - left - 64, 8)
     if footnote:
-        draw_wrapped(draw, (left + 38, max(body_end + 12, bottom - 58)), footnote, font(18, True), accent, right - left - 76, 4)
+        draw_wrapped(draw, (left + 32, max(body_end + 12, bottom - 62)), footnote, font(20, True), accent, right - left - 64, 4)
 
 
 def main():
     image = Image.new("RGB", (1920, 1080), BG)
     draw = ImageDraw.Draw(image)
 
-    draw.text((82, 58), "ECG5000 heartbeat classification", font=font(51, True), fill=NAVY)
+    draw.text((55, 50), "ECG5000 heartbeat classification", font=font(56, True), fill=NAVY)
     draw.text(
-        (84, 127),
+        (57, 124),
         "Task, target, inputs, relevance, data, split, preprocessing and success metric",
-        font=font(27),
+        font=font(30),
         fill=MUTED,
     )
-    draw.rounded_rectangle((1570, 66, 1838, 126), radius=30, fill="#EAF4FA")
+    draw.rounded_rectangle((1552, 57, 1868, 127), radius=35, fill="#EAF4FA")
     pill = "SUPERVISED LEARNING"
-    pill_box = draw.textbbox((0, 0), pill, font=font(20, True))
-    draw.text((1704 - (pill_box[2] - pill_box[0]) / 2, 85), pill, font=font(20, True), fill=BLUE)
+    pill_font = font(22, True)
+    pill_box = draw.textbbox((0, 0), pill, font=pill_font)
+    draw.text((1710 - (pill_box[2] - pill_box[0]) / 2, 80), pill, font=pill_font, fill=BLUE)
 
     card(
         draw,
-        (82, 208, 498, 560),
+        (55, 190, 495, 568),
         1,
         "Task",
         BLUE,
@@ -97,7 +98,7 @@ def main():
     )
     card(
         draw,
-        (528, 208, 944, 560),
+        (513, 190, 953, 568),
         2,
         "Target",
         PURPLE,
@@ -105,7 +106,7 @@ def main():
     )
     card(
         draw,
-        (974, 208, 1390, 560),
+        (971, 190, 1411, 568),
         3,
         "Inputs",
         TEAL,
@@ -113,7 +114,7 @@ def main():
     )
     card(
         draw,
-        (1420, 208, 1838, 560),
+        (1429, 190, 1869, 568),
         4,
         "Practical relevance",
         ORANGE,
@@ -122,7 +123,7 @@ def main():
     )
     card(
         draw,
-        (82, 600, 498, 952),
+        (55, 584, 495, 962),
         5,
         "Data characteristics",
         RED,
@@ -130,7 +131,7 @@ def main():
     )
     card(
         draw,
-        (528, 600, 944, 952),
+        (513, 584, 953, 962),
         6,
         "Split",
         BLUE,
@@ -139,7 +140,7 @@ def main():
     )
     card(
         draw,
-        (974, 600, 1390, 952),
+        (971, 584, 1411, 962),
         7,
         "Preprocessing",
         TEAL,
@@ -148,7 +149,7 @@ def main():
     )
     card(
         draw,
-        (1420, 600, 1838, 952),
+        (1429, 584, 1869, 962),
         8,
         "Success metric",
         PURPLE,
@@ -160,17 +161,17 @@ def main():
         "Imbalance-aware evaluation",
     )
 
-    draw.line((82, 1000, 1838, 1000), fill=LINE, width=3)
+    draw.line((55, 997, 1869, 997), fill=LINE, width=3)
     draw.text(
-        (82, 1019),
+        (55, 1014),
         "Core challenge:",
-        font=font(23, True),
+        font=font(25, True),
         fill=RED,
     )
     draw.text(
-        (260, 1019),
+        (249, 1014),
         "severe class imbalance → class-weighted loss + macro-F1 evaluation",
-        font=font(23),
+        font=font(25),
         fill=TEXT,
     )
 

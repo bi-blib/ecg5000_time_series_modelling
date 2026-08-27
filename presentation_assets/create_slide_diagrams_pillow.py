@@ -83,13 +83,14 @@ def make_pipeline():
 def make_distribution():
     image = Image.new("RGB", (1890, 1044), "white")
     draw = ImageDraw.Draw(image)
-    draw.text((85, 62), "ECG5000 class distribution", font=font(48, True), fill=NAVY)
-    draw.text((85, 128), "The rarest class represents only 0.5% of the dataset", font=font(27), fill=GREY)
+    draw.text((70, 42), "ECG5000 class distribution", font=font(56, True), fill=NAVY)
+    draw.text((70, 116), "The rarest class represents only 0.5% of the dataset", font=font(32), fill=GREY)
     draw.text(
-        (85, 172),
-        "Implemented split: 500 train  |  2,250 validation  |  2,250 test (stratified validation/test)",
-        font=font(21, True),
+        (70, 168),
+        "Implemented split:\n500 train  |  2,250 validation  |  2,250 test\n(stratified validation/test)",
+        font=font(30, True),
         fill=BLUE,
+        spacing=7,
     )
 
     labels = [
@@ -101,10 +102,10 @@ def make_distribution():
     ]
     counts = [2919, 1767, 96, 194, 24]
     percentages = [58.4, 35.3, 1.9, 3.9, 0.5]
-    colors = [BLUE, CYAN, "#E5B34B", ORANGE, RED]
+    colors = [BLUE, "#1E8F7A", ORANGE, RED, "#E5B34B"]
 
     # Donut chart. Draw smallest slices last so their boundaries remain clear.
-    pie_box = (135, 225, 895, 985)
+    pie_box = (60, 300, 790, 1030)
     start_angle = -90
     for count, color in zip(counts, colors):
         sweep = count / sum(counts) * 360
@@ -112,28 +113,39 @@ def make_distribution():
         start_angle += sweep
 
     # Cut out the center to produce a spacious, slide-friendly donut.
-    center_box = (345, 435, 685, 775)
+    center_box = (260, 500, 590, 830)
     draw.ellipse(center_box, fill="white")
-    centered_multiline(draw, center_box, "5,000\nheartbeats", font(37, True), NAVY, 4)
+    centered_multiline(draw, center_box, "5,000\nheartbeats", font(44, True), NAVY, 5)
 
-    # Legend with exact percentages and counts.
-    legend_x, legend_y, row_gap = 1005, 258, 120
-    draw.text((legend_x, 205), "Diagnosis", font=font(27, True), fill=GREY)
+    # Large diagnosis card aligned with the title and containing exact values.
+    diagnosis_box = (915, 35, 1845, 815)
+    draw.rounded_rectangle(diagnosis_box, radius=28, fill="#F7FAFC", outline=GRID, width=4)
+    legend_x, legend_y, row_gap = 955, 125, 133
+    draw.text((legend_x, 55), "Diagnosis", font=font(42, True), fill=GREY)
     for index, (label, count, pct, color) in enumerate(zip(labels, counts, percentages, colors)):
         y = legend_y + index * row_gap
-        draw.rounded_rectangle((legend_x, y, legend_x + 45, y + 45), radius=9, fill=color)
-        draw.text((legend_x + 72, y - 1), label, font=font(24, True), fill=NAVY)
-        draw.text((legend_x + 72, y + 43), f"{pct:.1f}%  |  {count:,} beats", font=font(24), fill=GREY)
+        draw.rounded_rectangle((legend_x, y, legend_x + 64, y + 64), radius=14, fill=color)
+        draw.text((legend_x + 88, y - 3), label, font=font(29, True), fill=NAVY)
+        draw.text((legend_x + 88, y + 47), f"{pct:.1f}%  |  {count:,} beats", font=font(29), fill=GREY)
 
     # Make the central comparison explicit without putting unreadable labels on tiny slices.
-    draw.rounded_rectangle((1025, 845, 1805, 920), radius=18, fill="#F5F8FA", outline=GRID, width=3)
-    draw.text((1050, 864), "Three rare diagnoses together: only 6.3% of the data", font=font(25, True), fill=NAVY)
+    comparison_box = (915, 830, 1845, 925)
+    draw.rounded_rectangle(comparison_box, radius=22, fill="#F5F8FA", outline=GRID, width=4)
+    centered_multiline(
+        draw,
+        comparison_box,
+        "Three rare diagnoses together: only 6.3% of the data",
+        font(29, True),
+        NAVY,
+    )
 
-    note = "Implication: class-weighted loss + macro-F1 evaluation"
-    note_box = draw.textbbox((0, 0), note, font=font(25, True))
+    note = "Implication: oversampling + macro-F1 evaluation"
+    note_font = font(29, True)
+    note_box = draw.textbbox((0, 0), note, font=note_font)
     note_width = note_box[2] - note_box[0]
-    draw.rounded_rectangle((1810 - note_width - 46, 945, 1810, 1015), radius=18, fill="#FFF5F5", outline="#F1CACA", width=3)
-    draw.text((1787 - note_width, 964), note, font=font(25, True), fill=RED)
+    implication_box = (1845 - note_width - 64, 940, 1845, 1030)
+    draw.rounded_rectangle(implication_box, radius=22, fill="#FFF5F5", outline="#F1CACA", width=4)
+    centered_multiline(draw, implication_box, note, note_font, RED)
     image.save(OUT_DIR / "ecg_class_distribution.png")
 
 

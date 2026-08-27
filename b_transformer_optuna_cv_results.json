@@ -2,38 +2,38 @@
   "task": "binary",
   "model_type": "transformer",
   "lambda_star": {
-    "d_model": 64,
-    "n_heads": 2,
+    "d_model": 128,
+    "n_heads": 4,
     "num_layers": 2,
-    "dim_ff": 256,
-    "lr": 0.002115429079726122,
-    "weight_decay": 0.005727904470799624,
-    "batch_size": 128,
+    "dim_ff": 64,
+    "lr": 9.280687537564391e-05,
+    "weight_decay": 0.00032295598684863307,
+    "batch_size": 32,
     "model_type": "transformer",
     "qkv_proj_blocksize": 4
   },
   "cv_fold_val_losses": [
-    0.01918892293178942,
-    0.09765434067230672,
-    0.00012601504727172141,
-    0.045772545505315065,
-    0.09839313367410796
+    0.0161415025851546,
+    0.05623742497454469,
+    0.0037668716731087235,
+    0.020327625079796866,
+    0.05995235258999925
   ],
-  "cv_fold_val_loss_mean": 0.052226991566158176,
-  "cv_fold_val_loss_std": 0.04484039008306702,
+  "cv_fold_val_loss_mean": 0.03128515538052083,
+  "cv_fold_val_loss_std": 0.025254096609359664,
   "best_fold": 3,
   "checkpoint_path": "b_transformer_optuna_fold3_model.pth",
   "decision_threshold": {
     "beta": 2.0,
-    "threshold": 0.9893550872802734
+    "threshold": 0.34844210743904114
   },
   "test_performance_indicator": "balanced_accuracy",
-  "test_balanced_accuracy": 0.9873632772580143,
+  "test_balanced_accuracy": 0.9917135307332102,
   "split_sizes": {
     "development": 2000,
     "best_fold_train": 1600,
     "best_fold_validation": 400,
     "test": 3000
   },
-  "hpo_validation_loss": 0.0033650978875812143
+  "hpo_validation_loss": 0.010501970566110685
 }

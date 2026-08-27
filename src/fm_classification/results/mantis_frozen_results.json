@@ -1,0 +1,168 @@
+[
+  {
+    "task": "binary",
+    "model": "MantisV2FrozenClassifier",
+    "pretrained_model": "paris-noah/MantisV2",
+    "representation": "final_cls_token",
+    "oversampling": "none",
+    "split_sizes": {
+      "train_original": 500,
+      "train_after_oversampling": 500,
+      "validation": 2250,
+      "test": 2250
+    },
+    "best_epoch": 107,
+    "best_validation_loss": 0.07303559288880984,
+    "epochs_run": 117,
+    "test_accuracy": 0.9773333333333334,
+    "test_macro_precision": 0.9800258066429859,
+    "test_macro_recall": 0.9736784334387074,
+    "test_macro_f1": 0.9765270748685055,
+    "test_balanced_accuracy": 0.9736784334387074,
+    "test_macro_auroc": 0.9909602700698592,
+    "test_macro_auprc": 0.9917564045080928,
+    "mean_head_epoch_seconds": 0.06006256943075066,
+    "confusion_matrix": [
+      [
+        1308,
+        6
+      ],
+      [
+        45,
+        891
+      ]
+    ],
+    "classification_report": {
+      "Normal": {
+        "precision": 0.9667405764966741,
+        "recall": 0.9954337899543378,
+        "f1-score": 0.9808773903262092,
+        "support": 1314.0
+      },
+      "Abnormal": {
+        "precision": 0.9933110367892977,
+        "recall": 0.9519230769230769,
+        "f1-score": 0.972176759410802,
+        "support": 936.0
+      },
+      "accuracy": 0.9773333333333334,
+      "macro avg": {
+        "precision": 0.9800258066429859,
+        "recall": 0.9736784334387074,
+        "f1-score": 0.9765270748685055,
+        "support": 2250.0
+      },
+      "weighted avg": {
+        "precision": 0.9777938879784055,
+        "recall": 0.9773333333333334,
+        "f1-score": 0.9772579278653999,
+        "support": 2250.0
+      }
+    },
+    "scaler": {
+      "mean": [
+        7.35492280158821e-11
+      ],
+      "scale": [
+        0.9964221709359703
+      ]
+    }
+  },
+  {
+    "task": "multiclass",
+    "model": "MantisV2FrozenClassifier",
+    "pretrained_model": "paris-noah/MantisV2",
+    "representation": "final_cls_token",
+    "oversampling": "+20",
+    "split_sizes": {
+      "train_original": 208,
+      "train_after_oversampling": 268,
+      "validation": 937,
+      "test": 936
+    },
+    "best_epoch": 49,
+    "best_validation_loss": 0.43404735177755355,
+    "epochs_run": 59,
+    "test_accuracy": 0.8685897435897436,
+    "test_macro_precision": 0.5338836296302636,
+    "test_macro_recall": 0.4798091749529918,
+    "test_macro_f1": 0.5021969156193637,
+    "test_balanced_accuracy": 0.4798091749529918,
+    "test_macro_auroc": 0.8557907162208949,
+    "test_macro_auprc": 0.5270458625868575,
+    "mean_head_epoch_seconds": 0.031060865369893737,
+    "confusion_matrix": [
+      [
+        755,
+        8,
+        29,
+        3
+      ],
+      [
+        12,
+        19,
+        7,
+        5
+      ],
+      [
+        47,
+        0,
+        38,
+        2
+      ],
+      [
+        3,
+        3,
+        4,
+        1
+      ]
+    ],
+    "classification_report": {
+      "R-on-T PVC": {
+        "precision": 0.9241126070991432,
+        "recall": 0.949685534591195,
+        "f1-score": 0.9367245657568238,
+        "support": 795.0
+      },
+      "PVC": {
+        "precision": 0.6333333333333333,
+        "recall": 0.4418604651162791,
+        "f1-score": 0.5205479452054794,
+        "support": 43.0
+      },
+      "Supraventricular/ectopic": {
+        "precision": 0.48717948717948717,
+        "recall": 0.4367816091954023,
+        "f1-score": 0.46060606060606063,
+        "support": 87.0
+      },
+      "Unclassified": {
+        "precision": 0.09090909090909091,
+        "recall": 0.09090909090909091,
+        "f1-score": 0.09090909090909091,
+        "support": 11.0
+      },
+      "accuracy": 0.8685897435897436,
+      "macro avg": {
+        "precision": 0.5338836296302636,
+        "recall": 0.4798091749529918,
+        "f1-score": 0.5021969156193637,
+        "support": 936.0
+      },
+      "weighted avg": {
+        "precision": 0.860349862565991,
+        "recall": 0.8685897435897436,
+        "f1-score": 0.863410596894485,
+        "support": 936.0
+      }
+    },
+    "scaler": {
+      "mean": [
+        5.848289953656928e-11
+      ],
+      "scale": [
+        0.9964221709560916
+      ]
+    }
+  }
+]

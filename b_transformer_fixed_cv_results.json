@@ -1,0 +1,37 @@
+{
+  "task": "binary",
+  "model_type": "transformer",
+  "lambda_star": {
+    "model_type": "transformer",
+    "d_model": 64,
+    "n_heads": 4,
+    "num_layers": 2,
+    "dim_ff": 128,
+    "lr": 0.0003,
+    "weight_decay": 0.0001,
+    "batch_size": 64
+  },
+  "cv_fold_val_losses": [
+    0.015438029613246076,
+    0.06618293258361518,
+    0.0017249446162687881,
+    0.026321217750332186,
+    0.05587303372366088
+  ],
+  "cv_fold_val_loss_mean": 0.03310803165742462,
+  "cv_fold_val_loss_std": 0.027181714247985735,
+  "best_fold": 3,
+  "checkpoint_path": "b_transformer_fixed_fold3_model.pth",
+  "decision_threshold": {
+    "beta": 2.0,
+    "threshold": 0.7790699005126953
+  },
+  "test_performance_indicator": "balanced_accuracy",
+  "test_balanced_accuracy": 0.9893648785390392,
+  "split_sizes": {
+    "development": 2000,
+    "best_fold_train": 1600,
+    "best_fold_validation": 400,
+    "test": 3000
+  }
+}

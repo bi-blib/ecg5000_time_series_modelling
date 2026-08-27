@@ -1,2 +1,0 @@
-Hyperparmeters
-Corss-validation

@@ -77,3 +77,12 @@ $RECYCLE.BIN/
 .env
 .env.*
 !.env.example
+
+# xLSTMandEncoderHPO run artifacts (written to CWD when scripts are run
+# from the repo root; see src/xLSTMandEncoderHPO/README.md)
+/b_*.png
+/b_*.pth
+/mc_*.png
+/mc_*.pth
+/*_cv_results.json
+/best_model.pth
